@@ -41,6 +41,7 @@ struct ViewportView: NSViewRepresentable {
             c.frameModel(focus: selectedNode)
         }
         c.lastFrameRequest = frameRequest
+        c.setMetersPerUnit(document?.metadata.metersPerUnit ?? 1)
         c.apply(settings)
         c.applySelection(selected: selectedNode, isolated: isolatedNode, revision: sceneRevision)
     }
@@ -65,6 +66,14 @@ struct ViewportView: NSViewRepresentable {
         private var buildGeneration = 0
         private var showEnvironment = true
         private var appliedBackdrop: CGImage?
+        /// The true-scale clay scene: scaled into the model's units and positioned under it.
+        private let scaleRoot = SCNNode()
+        private let sun = SCNNode()
+        private var builtScene: ScaleScene?
+        private var sceneAnchor: SIMD3<Float> = .zero
+        private var sceneFrame: (lo: SIMD3<Float>, hi: SIMD3<Float>)?
+        private var metersPerUnit: Double = 1
+        private var placedRevision: Int?
 
         override init() {
             super.init()
@@ -78,6 +87,19 @@ struct ViewportView: NSViewRepresentable {
             scene.rootNode.addChildNode(cameraNode)
             gridNode.name = "__viewer_grid"
             scene.rootNode.addChildNode(gridNode)
+            scaleRoot.name = "__scale_scene"
+            scene.rootNode.addChildNode(scaleRoot)
+            // A soft key light so the model grounds itself with contact shadows in scale scenes.
+            let light = SCNLight()
+            light.type = .directional
+            light.intensity = 650
+            light.castsShadow = true
+            light.automaticallyAdjustsShadowProjection = true
+            light.shadowMapSize = CGSize(width: 4096, height: 4096)
+            light.shadowSampleCount = 16
+            light.shadowRadius = 6
+            light.shadowColor = NSColor(white: 0, alpha: 0.5)
+            sun.light = light
             scene.lightingEnvironment.intensity = 1
         }
 
@@ -90,6 +112,7 @@ struct ViewportView: NSViewRepresentable {
             }
             root.removeFromParentNode()
             scene.rootNode.addChildNode(root)
+            placeScaleScene()
             frameModel()
         }
 
@@ -111,7 +134,12 @@ struct ViewportView: NSViewRepresentable {
 
         /// Frames the whole model, or `focus` (the selected object) when given.
         func frameModel(focus: SCNNode? = nil) {
-            guard let (lo, hi) = worldBounds(of: focus) ?? worldBounds() else { return }
+            guard var (lo, hi) = worldBounds(of: focus) ?? worldBounds() else { return }
+            // In a scale scene, take in the surroundings too.
+            if focus == nil, let region = sceneFrameInWorld() {
+                lo = simd_min(lo, region.lo)
+                hi = simd_max(hi, region.hi)
+            }
             let center = (lo + hi) / 2
             let radius = max(simd_length(hi - lo) / 2, 0.001)
             let distance = radius / sin(Float(20 * Double.pi / 180)) * 1.1
@@ -169,7 +197,8 @@ struct ViewportView: NSViewRepresentable {
             scene.lightingEnvironment.intensity = CGFloat(settings.environmentIntensity)
             updateBackground()
             cameraNode.camera?.exposureOffset = settings.exposure
-            gridNode.isHidden = !settings.showGrid
+            applyScaleScene(settings.scaleScene)
+            gridNode.isHidden = !settings.showGrid || settings.scaleScene.kind != .none
             scene.isPaused = !settings.isPlaying
             view?.isPlaying = settings.isPlaying
         }
@@ -209,7 +238,62 @@ struct ViewportView: NSViewRepresentable {
 
         // MARK: Selection & isolation
 
+        // MARK: Scale scenes
+
+        func setMetersPerUnit(_ value: Double) {
+            guard value != metersPerUnit else { return }
+            metersPerUnit = value
+            placeScaleScene()
+        }
+
+        private func applyScaleScene(_ setup: ScaleScene) {
+            guard setup != builtScene else { return }
+            let reframe = builtScene?.kind != setup.kind || builtScene?.effectiveSurface != setup.effectiveSurface
+            builtScene = setup
+            scaleRoot.childNodes.forEach { $0.removeFromParentNode() }
+            sun.removeFromParentNode()
+            sceneFrame = nil
+            if let built = ScaleSceneBuilder.build(setup) {
+                scaleRoot.addChildNode(built.node)
+                // The sun lives outside the scaled container: a scaled light node breaks shadow projection.
+                if sun.parent == nil { scene.rootNode.addChildNode(sun) }
+                sceneAnchor = built.anchor
+                sceneFrame = built.frame
+            }
+            placeScaleScene()
+            if reframe, currentRoot != nil { frameModel() }
+        }
+
+        /// Puts the scene's anchor (e.g. the desktop) under the model's bottom center, at the model's scale.
+        private func placeScaleScene() {
+            guard sceneFrame != nil else { return }
+            let mpu = Float(max(metersPerUnit, 1e-9))
+            scaleRoot.simdScale = SIMD3(repeating: 1 / mpu)
+            let bounds = worldBounds() ?? (.zero, .zero)
+            let bottom = SIMD3((bounds.min.x + bounds.max.x) / 2, bounds.min.y, (bounds.min.z + bounds.max.z) / 2)
+            scaleRoot.simdPosition = bottom - sceneAnchor / mpu
+            // Aim the sun at the model from above, front-left.
+            sun.simdPosition = bottom + SIMD3<Float>(-1.2, 3, 1.6) / mpu
+            sun.simdLook(at: bottom)
+            // Shadow ranges are in scene units; express them in meters so millimeter models get shadows too.
+            sun.light?.maximumShadowDistance = CGFloat(12 / mpu)
+            sun.light?.zNear = CGFloat(0.01 / mpu)
+            sun.light?.zFar = CGFloat(40 / mpu)
+            sun.light?.orthographicScale = CGFloat(4 / mpu)
+        }
+
+        private func sceneFrameInWorld() -> (lo: SIMD3<Float>, hi: SIMD3<Float>)? {
+            guard let frame = sceneFrame else { return nil }
+            let a = scaleRoot.simdConvertPosition(frame.lo, to: nil), b = scaleRoot.simdConvertPosition(frame.hi, to: nil)
+            return (simd_min(a, b), simd_max(a, b))
+        }
+
         func applySelection(selected: SCNNode?, isolated: SCNNode?, revision: Int) {
+            // Object edits can change the model's footprint: keep it standing on the scene's surface.
+            if placedRevision != revision {
+                placedRevision = revision
+                placeScaleScene()
+            }
             if let shown = shownSelection, shown.node === selected, shown.isolated === isolated, shown.revision == revision { return }
             shownSelection = (selected, isolated, revision)
 

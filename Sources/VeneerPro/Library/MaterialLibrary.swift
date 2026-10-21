@@ -22,14 +22,30 @@ final class MaterialLibrary {
         var maxPixelSize: Int? { self == .original ? nil : rawValue }
     }
 
-    /// Every library: the built-in Veneer Essentials first, then each folder the user has added.
-    private(set) var sources: [URL] = [BuiltInMaterials.root]
+    /// Every library: the online CC0 libraries, then each folder the user added.
+    private(set) var sources: [URL] = MaterialLibrary.fixedSources
+    /// Why the selected online library couldn't load (e.g. offline).
+    private(set) var loadError: String?
+
+    private static let fixedSources = OnlineLibrary.Provider.allCases.map(\.source)
+
+    private static func isFixed(_ url: URL) -> Bool { OnlineLibrary.isOnline(url) }
     /// The library being browsed.
     private(set) var root: URL?
     private(set) var materials: [LibraryMaterial] = []
     private(set) var isScanning = false
+    /// The last failure while applying (e.g. a Substance archive with no renderer installed).
+    var applyError: String?
     var searchText = ""
-    var category: String?
+    /// Selected filter chips ("Category|Metal", "Subcategory|Metal/Brushed").
+    var filters: Set<String> = [] {
+        didSet {
+            // Drop subcategories whose category was deselected.
+            let tops = filters.filter { $0.hasPrefix("Category|") }.map { String($0.dropFirst(9)) + "/" }
+            let orphaned = filters.filter { key in key.hasPrefix("Subcategory|") && !tops.contains { key.dropFirst(12).hasPrefix($0) } }
+            if !orphaned.isEmpty { filters.subtract(orphaned) }
+        }
+    }
     var thumbnailSize: Double = 92
     var textureSize: TextureSize {
         didSet { UserDefaults.standard.set(textureSize.rawValue, forKey: Keys.textureSize) }
@@ -74,11 +90,11 @@ final class MaterialLibrary {
         }.value
         defaults.set(Array(known.union(detected.map(\.path))), forKey: Keys.sources + ".autoAdded")
         // Folders added while this was running stay in the list.
-        sources = [BuiltInMaterials.root] + existing + sources.filter { !existing.contains($0) && !BuiltInMaterials.isBuiltIn($0) }
+        sources = Self.fixedSources + existing + sources.filter { !existing.contains($0) && !Self.isFixed($0) }
         saveSources()
         let stored = defaults.string(forKey: Keys.selected)
-        let selected = stored == BuiltInMaterials.root.absoluteString ? BuiltInMaterials.root : stored.map { URL(fileURLWithPath: $0) }
-        if root == nil || root == BuiltInMaterials.root, let first = sources.first(where: { $0 == selected }) ?? sources.first {
+        let selected = stored.flatMap { s in Self.fixedSources.first { $0.absoluteString == s } } ?? stored.map { URL(fileURLWithPath: $0) }
+        if root == nil, let first = sources.first(where: { $0 == selected }) ?? sources.first {
             select(first)
         }
     }
@@ -94,13 +110,22 @@ final class MaterialLibrary {
                 candidates.append(base.appendingPathComponent(name).appendingPathComponent("Materials"))
             }
         }
+        // Adobe Substance apps keep their libraries and downloads under ~/Documents/Adobe.
+        let adobe = fm.homeDirectoryForCurrentUser.appendingPathComponent("Documents/Adobe")
+        for name in ((try? fm.contentsOfDirectory(atPath: adobe.path)) ?? []).sorted() where name.localizedCaseInsensitiveContains("Substance") {
+            candidates.append(adobe.appendingPathComponent(name))
+        }
         return candidates.filter { fm.fileExists(atPath: $0.path) }
     }
 
     // MARK: Sources
 
     func displayName(_ source: URL) -> String {
-        if BuiltInMaterials.isBuiltIn(source) { return BuiltInMaterials.displayName }
+        if let provider = OnlineLibrary.Provider(source: source) { return provider.displayName }
+        if source.standardizedFileURL == OnlineLibrary.downloadsFolder.standardizedFileURL { return "Downloaded" }
+        if source.path.contains("/Adobe/"), source.lastPathComponent.localizedCaseInsensitiveContains("Substance") {
+            return source.lastPathComponent.replacingOccurrences(of: "Adobe ", with: "")
+        }
         // ".../KeyShot Studio/Materials" → "KeyShot Studio"; ".../Visune Asset Library/Materials" → "Visune Asset Library".
         return source.lastPathComponent == "Materials" ? source.deletingLastPathComponent().lastPathComponent : source.lastPathComponent
     }
@@ -128,7 +153,7 @@ final class MaterialLibrary {
     }
 
     func remove(_ source: URL) {
-        guard !BuiltInMaterials.isBuiltIn(source) else { return }
+        guard !Self.isFixed(source) else { return }
         sources.removeAll { $0 == source }
         scanned[source] = nil
         saveSources()
@@ -141,12 +166,10 @@ final class MaterialLibrary {
 
     func select(_ source: URL) {
         root = source
-        category = nil
-        UserDefaults.standard.set(BuiltInMaterials.isBuiltIn(source) ? source.absoluteString : source.path, forKey: Keys.selected)
-        if BuiltInMaterials.isBuiltIn(source) {
-            materials = BuiltInMaterials.materials
-            isScanning = false
-        } else if let cached = scanned[source] {
+        filters = []
+        UserDefaults.standard.set(Self.isFixed(source) ? source.absoluteString : source.path, forKey: Keys.selected)
+        loadError = nil
+        if let cached = scanned[source] {
             materials = cached
         } else {
             materials = []
@@ -155,7 +178,21 @@ final class MaterialLibrary {
     }
 
     func rescan() {
-        guard let root, !BuiltInMaterials.isBuiltIn(root) else { return }
+        guard let root else { return }
+        if let provider = OnlineLibrary.Provider(source: root) {
+            isScanning = true
+            Task {
+                do {
+                    let found = try await OnlineLibrary.catalog(provider)
+                    scanned[root] = found
+                    if root == self.root { materials = found }
+                } catch {
+                    if root == self.root { loadError = "Couldn’t reach \(provider.displayName). Check your internet connection." }
+                }
+                if root == self.root { isScanning = false }
+            }
+            return
+        }
         isScanning = true
         Task {
             let found = await Task.detached(priority: .userInitiated) { LibraryMaterial.scan(root: root) }.value
@@ -168,39 +205,39 @@ final class MaterialLibrary {
     }
 
     private func saveSources() {
-        UserDefaults.standard.set(sources.filter { !BuiltInMaterials.isBuiltIn($0) }.map(\.path), forKey: Keys.sources)
+        UserDefaults.standard.set(sources.filter { !Self.isFixed($0) }.map(\.path), forKey: Keys.sources)
     }
 
     // MARK: Browsing
-
-    /// Top-level categories ("Metal") with counts.
-    var categories: [(name: String, count: Int)] {
-        counts(materials.map { $0.category.split(separator: "/").first.map(String.init) ?? "" })
+    /// Filter tags for a material: its top-level category and, below that, its subcategory.
+    private static func tags(_ m: LibraryMaterial) -> Set<String> {
+        let parts = m.category.split(separator: "/").map(String.init)
+        var tags: Set<String> = ["Category|" + (parts.first ?? "")]
+        if parts.count > 1 { tags.insert("Subcategory|" + parts[0] + "/" + parts[1]) }
+        return tags
     }
 
-    /// Second-level categories under the selected top-level one ("Metal/Anodized"), with counts.
-    var subcategories: [(name: String, count: Int)] {
-        guard let top = topCategory else { return [] }
-        let names = materials.compactMap { m -> String? in
-            guard m.category.hasPrefix(top + "/") else { return nil }
-            return m.category.split(separator: "/").prefix(2).joined(separator: "/")
+    /// The filter chips: categories, and the subcategories of whichever categories are selected.
+    var filterGroups: [FilterGroup] {
+        let all = materials.map(Self.tags)
+        let categories = FilterMatch.options(for: "Category", in: all, labels: { $0.isEmpty ? "Uncategorized" : $0 },
+                                             order: Set(all.flatMap { $0 }.filter { $0.hasPrefix("Category|") }
+                                                 .map { String($0.dropFirst(9)) }).sorted { $0.localizedLowercase < $1.localizedLowercase })
+        let selectedTops = filters.filter { $0.hasPrefix("Category|") }.map { String($0.dropFirst(9)) }
+        var groups = [FilterGroup(title: "Category", options: categories)]
+        if !selectedTops.isEmpty {
+            let inSelected = all.filter { tags in selectedTops.contains { tags.contains("Category|" + $0) } }
+            let subs = FilterMatch.options(for: "Subcategory", in: inSelected,
+                                           labels: { String($0.split(separator: "/").last ?? "") })
+            if subs.count > 1 { groups.append(FilterGroup(title: "Subcategory", options: subs)) }
         }
-        return counts(names)
-    }
-
-    /// The top-level part of the selected category.
-    var topCategory: String? { category?.split(separator: "/").first.map(String.init) }
-
-    private func counts(_ names: [String]) -> [(name: String, count: Int)] {
-        var counts: [String: Int] = [:]
-        for name in names { counts[name, default: 0] += 1 }
-        return counts.sorted { $0.key.localizedLowercase < $1.key.localizedLowercase }.map { ($0.key, $0.value) }
+        return groups
     }
 
     var filtered: [LibraryMaterial] {
         let query = searchText.trimmingCharacters(in: .whitespaces)
         return materials.filter { m in
-            (category == nil || m.category == category || m.category.hasPrefix(category! + "/"))
+            FilterMatch.matches(Self.tags(m), selection: filters)
                 && (query.isEmpty || m.name.localizedCaseInsensitiveContains(query)
                     || m.category.localizedCaseInsensitiveContains(query))
         }
@@ -217,20 +254,10 @@ final class MaterialLibrary {
     // MARK: Thumbnails & KeyShot data
 
     private func thumbnailKey(_ material: LibraryMaterial) -> URL? {
-        if BuiltInMaterials.isBuiltIn(material.location) { return material.location }
-        return material.preview ?? (material.isKeyShotFile ? material.location : nil)
-    }
-
-    /// Lighting for built-in material thumbnails (the Studio environment), loaded once.
-    @ObservationIgnored private var thumbnailEnvironment: CGImage??
-
-    private func builtInThumbnail(_ material: LibraryMaterial) async -> CGImage? {
-        if thumbnailEnvironment == nil {
-            let pixels = await EnvironmentLoader.load(.preset(.studio))
-            thumbnailEnvironment = .some(pixels?.cgImage())
+        if material.isSubstanceArchive || material.onlineAsset != nil {
+            return material.location
         }
-        let environment = thumbnailEnvironment ?? nil
-        return await Task.detached(priority: .utility) { BuiltInMaterials.thumbnail(for: material, environment: environment) }.value
+        return material.preview ?? (material.isKeyShotFile ? material.location : nil)
     }
 
     func cachedThumbnail(for material: LibraryMaterial) -> CGImage? {
@@ -240,9 +267,23 @@ final class MaterialLibrary {
     func thumbnail(for material: LibraryMaterial) async -> CGImage? {
         guard let key = thumbnailKey(material) else { return nil }
         if let cached = thumbnailCache.object(forKey: key as NSURL) { return cached }
-        if BuiltInMaterials.isBuiltIn(material.location) {
-            let image = await builtInThumbnail(material)
-            if let image { thumbnailCache.setObject(image, forKey: key as NSURL) }
+        if let asset = material.onlineAsset {
+            guard let url = asset.thumbnail, let data = await OnlineLibrary.thumbnailData(url),
+                  let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+            let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                            kCGImageSourceThumbnailMaxPixelSize: 320]
+            guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+            thumbnailCache.setObject(image, forKey: key as NSURL)
+            return image
+        }
+        if let archive = material.substanceArchive {
+            // A small render of the base color, when Substance's renderer is installed.
+            guard SubstanceRenderer.isAvailable,
+                  let files = try? await SubstanceRenderer.render(archive, sizeLog2: 8),
+                  let color = files.first(where: { MapKind.classify($0) == .baseColor }) ?? files.first,
+                  let source = CGImageSourceCreateWithURL(color as CFURL, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+            thumbnailCache.setObject(image, forKey: key as NSURL)
             return image
         }
         let preview = material.preview
@@ -292,11 +333,15 @@ final class MaterialLibrary {
 
     /// Loads the material's textures (off the main thread) and replaces `entry`'s node graph with one built from them.
     func apply(_ material: LibraryMaterial, to entry: MaterialEntry, textureSize: TextureSize? = nil) async {
-        if BuiltInMaterials.isBuiltIn(material.location) {
-            if let graph = BuiltInMaterials.graph(for: material) { entry.replaceGraph(graph) }
+        let maxSize = (textureSize ?? self.textureSize).maxPixelSize
+        if material.onlineAsset != nil {
+            await applyOnline(material, to: entry, textureSize: textureSize ?? self.textureSize)
             return
         }
-        let maxSize = (textureSize ?? self.textureSize).maxPixelSize
+        if let archive = material.substanceArchive {
+            await applySubstance(archive, material: material, to: entry, textureSize: textureSize ?? self.textureSize)
+            return
+        }
         let thumbnail = await thumbnail(for: material)
 
         if material.isKeyShotFile {
@@ -315,6 +360,50 @@ final class MaterialLibrary {
             return (result, thumbnail?.dominantColor())
         }.value
         entry.replaceGraph(MaterialGraph(library: material, textures: textures, keyShot: keyShot, previewColor: previewColor))
+    }
+
+    /// Downloads an online material's maps (once), lists the Downloaded folder, then applies it locally.
+    private func applyOnline(_ material: LibraryMaterial, to entry: MaterialEntry, textureSize: TextureSize) async {
+        // 8K scans are far too heavy for AR; Original means the largest sensible size.
+        let resolution = switch textureSize { case .k1: "1K"; case .k2: "2K"; case .k4, .original: "4K" }
+        do {
+            let folder = try await OnlineLibrary.download(material, resolution: resolution)
+            let downloads = OnlineLibrary.downloadsFolder
+            if !sources.contains(where: { $0.standardizedFileURL == downloads.standardizedFileURL }) {
+                sources.append(downloads)
+                saveSources()
+            }
+            scanned[downloads] = nil
+            guard let local = LibraryMaterial.from(path: folder) else { throw URLError(.cannotParseResponse) }
+            await apply(local, to: entry, textureSize: textureSize)
+        } catch {
+            applyError = "Couldn’t download “\(material.name)” from \(material.onlineAsset?.provider.displayName ?? "the library"). \(error.localizedDescription)"
+        }
+    }
+
+    /// Renders the archive's outputs with Substance, then builds the graph from them like a map folder.
+    private func applySubstance(_ archive: URL, material: LibraryMaterial, to entry: MaterialEntry, textureSize: TextureSize) async {
+        // Substance's default engine renders up to 2048 px.
+        let sizeLog2 = textureSize == .k1 ? 10 : 11
+        do {
+            let files = try await SubstanceRenderer.render(archive, sizeLog2: sizeLog2)
+            var maps: [MapKind: URL] = [:]
+            for file in files {
+                if let kind = MapKind.classify(file), kind != .preview, !kind.isUnsupported, maps[kind] == nil { maps[kind] = file }
+            }
+            let textures = await Task.detached(priority: .userInitiated) { () -> [MapKind: TextureRef] in
+                var result: [MapKind: TextureRef] = [:]
+                for (kind, url) in maps {
+                    guard let texture = TextureRef.load(url: url, maxPixelSize: textureSize.maxPixelSize)?.compactedForAR() else { continue }
+                    _ = texture.pixels
+                    result[kind] = texture
+                }
+                return result
+            }.value
+            entry.replaceGraph(MaterialGraph(library: material, textures: textures, keyShot: nil))
+        } catch {
+            applyError = error.localizedDescription
+        }
     }
 
     private func applyKeyShot(_ material: LibraryMaterial, to entry: MaterialEntry, maxSize: Int?, thumbnail: CGImage?) async {

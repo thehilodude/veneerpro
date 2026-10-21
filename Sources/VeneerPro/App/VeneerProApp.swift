@@ -150,7 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Headless conversion:
-        //   VeneerPro --convert <input> <output.usdz> [--material <library material folder | built-in name>] [--texture-size 2048]
+        //   VeneerPro --convert <input> <output.usdz> [--material <folder | .mtl | .sbsar | polyhaven:<id> | ambientcg:<id>>] [--texture-size 2048] [--max-texture 2048]
         //            [--mapping uv|planar|box|cylindrical|spherical] [--mapping-size meters] [--mapping-axis X|Y|Z]
         //   VeneerPro --scan-library <folder>   (lists detected materials and maps)
         let args = CommandLine.arguments
@@ -180,13 +180,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let path = option("--material") {
                     // Apply one library material (a map folder or a KeyShot .mtl) to every material.
                     let location = URL(fileURLWithPath: path)
-                    // A built-in preset by name ("Gold", "Metal/Gold"), or a folder / .mtl path.
-                    guard let material = BuiltInMaterials.material(named: path) ?? LibraryMaterial.from(path: location) else {
+                    // "polyhaven:<id>" / "ambientcg:<id>" download from those CC0 libraries.
+                    let online = path.split(separator: ":", maxSplits: 1).count == 2
+                        ? OnlineLibrary.Provider(rawValue: String(path.split(separator: ":")[0]).lowercased()).map { provider -> LibraryMaterial in
+                            let id = String(path.split(separator: ":", maxSplits: 1)[1])
+                            return LibraryMaterial(location: URL(string: "veneer-online://\(provider.rawValue)/\(id)")!, name: id,
+                                                   category: "Command Line", maps: [:], keyShotFile: nil,
+                                                   onlineAsset: OnlineAsset(provider: provider, id: id, thumbnail: nil))
+                        } : nil
+                    guard let material = online ?? LibraryMaterial.from(path: location) else {
                         throw ConverterError.loadFailed(location.lastPathComponent)
                     }
                     let size = option("--texture-size").flatMap(Int.init).flatMap(MaterialLibrary.TextureSize.init) ?? .k2
                     let library = MaterialLibrary()
                     for entry in document.materials { await library.apply(material, to: entry, textureSize: size) }
+                    if let error = library.applyError {
+                        FileHandle.standardError.write(Data((error + "\n").utf8))
+                        exit(1)
+                    }
                 }
                 if let kind = option("--mapping").flatMap({ k in TextureMapping.Kind.allCases.first { $0.rawValue.lowercased() == k.lowercased() } }) {
                     // Project every material's textures, e.g. --mapping box --mapping-size 0.05 (meters per tile).
@@ -196,7 +207,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     for entry in document.materials { entry.mapping = mapping }
                     document.applyMappingsNow()
                 }
-                let issues = try await Exporter.export(document, to: output)
+                var exportOptions = ExportOptions()
+                // --max-texture 2048: downscale larger textures (a lighter file for AR); exports keep full size otherwise.
+                if let cap = option("--max-texture").flatMap(Int.init) { exportOptions.maxTextureSize = cap }
+                let issues = try await Exporter.export(document, to: output, options: exportOptions)
                 print("Exported \(output.path) (\(document.materials.count) materials)")
                 issues.forEach { print($0) }
                 exit(0)

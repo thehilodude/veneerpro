@@ -22,20 +22,25 @@ import USDKit
 final class VisionProPreview {
     enum Status: Equatable {
         case idle
-        case connecting
-        case live
+        /// What's happening while the preview starts ("Preparing the model…").
+        case connecting(String)
+        case live(Mode)
         case updating
         case failed(String)
 
         var description: String {
             switch self {
             case .idle: ""
-            case .connecting: "Opening on Apple Vision Pro…"
-            case .live: "Live on Apple Vision Pro"
+            case let .connecting(step): "Vision Pro: \(step)"
+            case .live(.live): "Live on Apple Vision Pro"
+            case .live(.file): "On Apple Vision Pro (updates after each edit)"
+            case .live(.viewOnly): "On Apple Vision Pro (simplified, view only: edits won’t show)"
             case .updating: "Updating Apple Vision Pro…"
             case let .failed(message): "Vision Pro: \(message)"
             }
         }
+
+        var isConnecting: Bool { if case .connecting = self { true } else { false } }
     }
 
     private(set) var status: Status = .idle
@@ -45,6 +50,22 @@ final class VisionProPreview {
     let connected = ConnectedSpatialEndpointObserver()
 
     var isActive: Bool { session != nil }
+    /// Starting up (pressing the button again is ignored meanwhile).
+    var isConnecting: Bool { status.isConnecting }
+    /// How the headset is being kept in sync.
+    enum Mode: Equatable {
+        /// Full detail; edits stream instantly.
+        case live
+        /// A USDZ re-sent after each edit (models too heavy for live editing).
+        case file
+        /// Spatial Preview's simplified copy: viewable, but it ignores edits (last resort).
+        case viewOnly
+    }
+
+    @ObservationIgnored private var mode: Mode = .live
+    /// Binary copy of the scene, used only for the view-only simplified fallback. Live sessions share the
+    /// text layer: that's the configuration verified to stream edits to the headset.
+    @ObservationIgnored private var binaryStage: URL?
 
     @ObservationIgnored private var session: (any SpatialPreviewSession)?
     @ObservationIgnored private var usdSession: USDPreviewSession?
@@ -76,35 +97,60 @@ final class VisionProPreview {
 
     /// Texture bake size for live updates: smaller than export size so edits arrive quickly.
     private static let liveBakeCap = 1024
+    /// Largest texture sent to the headset (unmodified source textures are downsized to this).
+    nonisolated private static let liveTextureCap = 2048
 
     // MARK: Session lifecycle
 
     /// Opens `document` on the headset at `endpoint` (the connected Vision Pro, or one picked in the device picker).
     func start(_ document: ModelDocument, endpoint: SpatialPreviewEndpoint, history: EditHistory) async {
+        guard !isConnecting else { return }
         await stop()
         self.document = document
         self.history = history
-        status = .connecting
+        status = .connecting("Preparing the model…")
         Self.log("start: \(document.name)")
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("VeneerPro-VisionPro-\(UUID().uuidString)")
         self.folder = folder
         do {
             try FileManager.default.createDirectory(at: folder.appendingPathComponent("textures"), withIntermediateDirectories: true)
-            try await startLive(endpoint: endpoint)
+            try await prepareStage()
+        } catch {
+            return await fail("preparing the model failed: \(error)", error)
+        }
+
+        // 1. Full detail, edits stream instantly. 2. A USDZ re-sent after each edit, for models too heavy
+        //    to share as is: slower, but every edit shows. 3. Spatial Preview's simplified copy, view only
+        //    (its scene can be rebuilt on the headset, and then it ignores edits). Each step has a time
+        //    limit, so a stalled step falls through to the next instead of hanging.
+        do {
+            try await startLive(endpoint: endpoint, optimized: false)
+            mode = .live
         } catch {
             Self.log("live start failed: \(error)")
-            // Fall back to a whole-file preview that's refreshed on every change.
             do {
                 try await startDocument(endpoint: endpoint)
-            } catch let fallbackError {
-                Self.log("document start failed: \(fallbackError)")
-                status = .failed(fallbackError.localizedDescription)
-                await stop(keepStatus: true)
-                return
+                mode = .file
+            } catch {
+                Self.log("document start failed: \(error)")
+                do {
+                    try await startLive(endpoint: endpoint, optimized: true)
+                    mode = .viewOnly
+                } catch {
+                    return await fail("optimized live start failed: \(error)", error)
+                }
             }
         }
-        status = .live
-        observeChanges()
+        Self.log("mode: \(mode)")
+        status = .live(mode)
+        // A simplified copy ignores edits, so don't send them.
+        if mode != .viewOnly { observeChanges() }
+    }
+
+    private func fail(_ message: String, _ error: Error) async {
+        Self.log(message)
+        status = .failed(error.localizedDescription)
+        await stop(keepStatus: true)
     }
 
     func stop(keepStatus: Bool = false) async {
@@ -120,6 +166,7 @@ final class VisionProPreview {
         liveMaterialText = nil
         jobCache = [:]
         stableNames = [:]
+        mode = .live
         if let folder { try? FileManager.default.removeItem(at: folder) }
         folder = nil
         document = nil
@@ -128,41 +175,128 @@ final class VisionProPreview {
         if !keepStatus { status = .idle }
     }
 
-    private func startLive(endpoint: SpatialPreviewEndpoint) async throws {
+    /// Writes the scene layer the live session shares, as binary USD when possible.
+    private func prepareStage() async throws {
         guard let folder else { return }
         let jobs = await materialJobs()
         let scene = try await write(jobs, part: .all)
-        let materials = try await write(jobs, part: .materials)
-        let url = folder.appendingPathComponent("scene.usda")
-        try scene.write(to: url, atomically: true, encoding: .utf8)
+        liveMaterialText = try await write(jobs, part: .materials)
+        let text = folder.appendingPathComponent("scene.usda")
+        try scene.write(to: text, atomically: true, encoding: .utf8)
+        binaryStage = nil
+        if USDTools.canConvertToBinary {
+            let binary = folder.appendingPathComponent("scene.usdc")
+            let converted = await Task.detached(priority: .userInitiated) { (try? USDTools.convertToBinary(text, output: binary)) != nil }.value
+            if converted { binaryStage = binary }
+        }
+        Self.log("stage written: \(scene.utf8.count / 1_000_000) MB")
+    }
 
-        let stage = try USDStage.open(FilePath(url.path))
+    private func startLive(endpoint: SpatialPreviewEndpoint, optimized: Bool) async throws {
+        guard let folder else { return }
+        let step = optimized ? "Simplifying the model for Vision Pro…" : "Opening on Apple Vision Pro…"
+        status = .connecting(step)
+        // Live: the text layer. Simplified view-only: the (much smaller) binary copy, if there is one.
+        let file = optimized ? (binaryStage ?? folder.appendingPathComponent("scene.usda")) : folder.appendingPathComponent("scene.usda")
+        let stage = try USDStage.open(FilePath(file.path))
         let session = USDPreviewSession(stage: stage)
         let bridge = UndoBridge(history: history)
         session.delegate = bridge
-        // `.unmodified` is required for live edits: the default optimization can rebuild the scene on the
-        // headset, and a rebuilt scene ignores later stage edits. Too-heavy scenes throw `assetUnshareable`.
-        try await session.start(endpoint: endpoint, parameters: .unmodified, viewerOptions: [.annotations, .perObjectManipulation, .export])
-        Self.log("live session started")
+        // `.unmodified` is what keeps edits live: Spatial Preview's optimization can rebuild the scene on the
+        // headset, and a rebuilt scene ignores later edits. Scenes too heavy to share as-is throw
+        // `assetUnshareable`; the optimized copy is only the last-resort, view-only fallback.
+        let progress = showProgress(of: session, step: step)
+        defer { progress.cancel() }
+        let parameters: USDPreviewSession.OptimizationParameters = optimized ? .processed([.optimized, .compressed]) : .unmodified
+        do {
+            try await Self.withTimeout(optimized ? 180 : 90, step: optimized ? "Simplifying the model" : "Opening the live preview") {
+                try await session.start(endpoint: endpoint, parameters: parameters,
+                                        viewerOptions: [.annotations, .perObjectManipulation, .export])
+            }
+        } catch {
+            try? await session.close()
+            throw error
+        }
+        Self.log(optimized ? "optimized live session started" : "live session started")
         self.stage = stage
         self.usdSession = session
         self.session = session
         self.undoBridge = bridge
-        liveMaterialText = materials
         await syncUndoCounts()
     }
 
     private func startDocument(endpoint: SpatialPreviewEndpoint) async throws {
         guard let document, let folder else { return }
-        let session = DocumentPreviewSession(name: document.name, contentType: .usdz)
-        try await session.start(endpoint: endpoint)
+        status = .connecting("Preparing a file for Vision Pro…")
         revision += 1
         let url = folder.appendingPathComponent("\(document.name)-\(revision).usdz")
-        _ = try await Exporter.export(document, to: url, options: ExportOptions(binary: true, validate: false))
-        try await session.updateContents(url: url)
-        Self.log("document session started")
+        _ = try await Exporter.export(document, to: url, options: ExportOptions(binary: true, validate: false, maxTextureSize: Self.liveTextureCap))
+        Self.log("document exported (\(((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) / 1_000_000) MB)")
+        status = .connecting("Sending to Apple Vision Pro…")
+        let session = DocumentPreviewSession(name: document.name, contentType: .usdz)
+        // Tracked before it starts, so stopping meanwhile closes it instead of leaving it orphaned.
         self.documentSession = session
         self.session = session
+        do {
+            try await Self.withTimeout(180, step: "Sending the file") {
+                try await session.start(endpoint: endpoint)
+                try await session.updateContents(url: url)
+            }
+        } catch {
+            self.documentSession = nil
+            self.session = nil
+            try? await session.close()
+            throw error
+        }
+        Self.log("document session started")
+    }
+
+    /// Shows the session's progress ("Simplifying the model for Vision Pro… 42%") while it starts.
+    private func showProgress(of session: USDPreviewSession, step: String) -> Task<Void, Never> {
+        Task { [weak self] in
+            while !Task.isCancelled {
+                let progress = session.progress
+                if !progress.isIndeterminate, progress.fractionCompleted > 0, let self, self.status.isConnecting {
+                    self.status = .connecting("\(step) \(Int((progress.fractionCompleted * 100).rounded()))%")
+                }
+                try? await Task.sleep(for: .milliseconds(400))
+            }
+        }
+    }
+
+    struct TimedOut: LocalizedError {
+        let step: String
+        var errorDescription: String? { "\(step) took too long." }
+    }
+
+    /// Runs `work`, giving up after `seconds`. Unlike a task group, this returns at the deadline even if
+    /// `work` ignores cancellation (the caller then closes the session to stop it).
+    /// `work` runs on the main actor, where sessions must be started: a session started elsewhere doesn't
+    /// see the stage edits the app makes on the main thread, so live updates silently stop.
+    static func withTimeout(_ seconds: Double, step: String, _ work: @escaping @MainActor () async throws -> Void) async throws {
+        final class Once: @unchecked Sendable {
+            private let lock = NSLock()
+            private var done = false
+            func claim() -> Bool { lock.lock(); defer { lock.unlock() }; if done { return false }; done = true; return true }
+        }
+        let once = Once()
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let task = Task { @MainActor in
+                do {
+                    try await work()
+                    if once.claim() { continuation.resume() }
+                } catch {
+                    if once.claim() { continuation.resume(throwing: error) }
+                }
+            }
+            Task {
+                try? await Task.sleep(for: .seconds(seconds))
+                if once.claim() {
+                    task.cancel()
+                    continuation.resume(throwing: TimedOut(step: step))
+                }
+            }
+        }
     }
 
     // MARK: Live updates
@@ -188,7 +322,8 @@ final class VisionProPreview {
         guard !isPushing else { return }  // picked up when the running update finishes
         updateTask?.cancel()
         updateTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(150))
+            // A file re-send is a full export: wait for a real pause in editing (e.g. a slider drag) first.
+            try? await Task.sleep(for: .milliseconds(self?.mode == .file ? 1200 : 150))
             guard !Task.isCancelled, let self else { return }
             await self.pushUpdates()
         }
@@ -209,11 +344,11 @@ final class VisionProPreview {
                 } else if let documentSession, let document, let folder {
                     revision += 1
                     let url = folder.appendingPathComponent("\(document.name)-\(revision).usdz")
-                    _ = try await Exporter.export(document, to: url, options: ExportOptions(binary: true, validate: false))
+                    _ = try await Exporter.export(document, to: url, options: ExportOptions(binary: true, validate: false, maxTextureSize: Self.liveTextureCap))
                     try await documentSession.updateContents(url: url)
                 }
                 await syncUndoCounts()
-                status = session?.state.isInvalidated == true ? .failed("The headset closed the preview.") : .live
+                status = session?.state.isInvalidated == true ? .failed("The headset closed the preview.") : .live(mode)
             } catch {
                 Self.log("update failed: \(error)")
                 status = .failed(error.localizedDescription)
@@ -284,6 +419,7 @@ final class VisionProPreview {
             writer.part = part
             writer.contentHashedTextures = true
             writer.bakeCache = cache
+            writer.maxTextureSize = Self.liveTextureCap
             return (writer.write(root: root, materials: jobs, metadata: metadata), writer.files)
         }.value
         for file in files {

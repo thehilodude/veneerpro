@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import SceneKit
 import simd
 
@@ -31,6 +32,8 @@ final class USDWriter {
     var contentHashedTextures = false
     /// Reuses earlier bakes of the same evaluator (an unchanged material) across writes.
     var bakeCache: BakeCache?
+    /// When set, source textures larger than this are downscaled (for previews; exports keep full size).
+    var maxTextureSize: Int?
 
     final class BakeCache: @unchecked Sendable {
         fileprivate var entries: [String: USDZPackager.Entry] = [:]
@@ -201,9 +204,27 @@ final class USDWriter {
     private func passthroughFile(_ texture: TextureRef) -> String {
         if let existing = passthroughFiles[texture] { return existing }
         let file = uniqueFileName(Self.identifier(texture.name, fallback: "texture"), ext: texture.fileExtension)
-        files.append(USDZPackager.Entry(path: file, data: texture.data))
+        let data = maxTextureSize.flatMap { Self.downscaled(texture.data, maxPixelSize: $0, jpeg: ["jpg", "jpeg"].contains(texture.fileExtension.lowercased())) }
+        files.append(USDZPackager.Entry(path: file, data: data ?? texture.data))
         passthroughFiles[texture] = file
         return file
+    }
+
+    /// `data` re-encoded at most `maxPixelSize` on its longer side, or nil when it's already that small.
+    static func downscaled(_ data: Data, maxPixelSize: Int, jpeg: Bool) -> Data? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int, let height = properties[kCGImagePropertyPixelHeight] as? Int,
+              max(width, height) > maxPixelSize else { return nil }
+        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                        kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+                                        kCGImageSourceCreateThumbnailWithTransform: true]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output, (jpeg ? "public.jpeg" : "public.png") as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, (jpeg ? [kCGImageDestinationLossyCompressionQuality: 0.9] : [:]) as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
     }
 
     private func bakedFile(_ value: GraphValue, material: String, channel: MaterialGraph.Channel, evaluator: GraphEvaluator) -> String {

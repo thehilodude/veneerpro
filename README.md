@@ -1,6 +1,6 @@
 # Veneer Pro
 
-**An AR model maker and CMF (color, material, finish) visualizer for macOS.** Import 3D models, dress them in node-based materials (built-in, or from your own Visune and KeyShot libraries), set KeyShot-style texture mapping, preview them live on Apple Vision Pro or on an iPhone/iPad, and export USDZ or FBX.
+**An AR model maker and CMF (color, material, finish) visualizer for macOS.** Import 3D models, dress them in node-based materials (free Poly Haven and ambientCG materials, or your own Visune, KeyShot and Substance libraries), set KeyShot-style texture mapping, preview them live on Apple Vision Pro or on an iPhone/iPad, and export USDZ or FBX.
 
 It began as a from-scratch take on Apple's Reality Converter. The difference is that **materials are edited as node graphs** instead of fixed channel slots.
 
@@ -17,7 +17,7 @@ It began as a from-scratch take on Apple's Reality Converter. The difference is 
 - Optional: [Reality Converter](https://developer.apple.com/augmented-reality/tools/) (free from Apple) for **FBX import**. Veneer Pro uses its FBX converter. FBX *export* works without it.
 - Optional: an Apple Vision Pro for the live spatial preview, or any iPhone/iPad on the same Wi-Fi for **Share to iPhone or iPad**.
 
-No account, setup or material library is needed: the built-in **Veneer Essentials** library works out of the box.
+No account, setup or material library is needed: free **Poly Haven** and **ambientCG** materials are built into the library browser.
 
 ## Build from source
 
@@ -38,8 +38,10 @@ Headless conversion:
 # a KeyShot material works too; add --mapping box|planar|cylindrical|spherical [--mapping-size 0.05] [--mapping-axis Y] to project it
 "build/Veneer Pro.app/Contents/MacOS/VeneerPro" --convert model.obj model.usdz \
     --material "/Library/Application Support/KeyShot Studio/Materials/Wood/Traditional/Walnut.mtl"
-# or one of the built-in Veneer Essentials materials, by name
-"build/Veneer Pro.app/Contents/MacOS/VeneerPro" --convert model.obj model.usdz --material "Walnut" --mapping box
+# or a free Poly Haven / ambientCG material, downloaded on the fly
+"build/Veneer Pro.app/Contents/MacOS/VeneerPro" --convert model.obj model.usdz --material polyhaven:rusty_metal_02 --mapping box
+# cap textures at 2K for a lighter AR file
+"build/Veneer Pro.app/Contents/MacOS/VeneerPro" --convert model.usdz light.usdz --max-texture 2048
 # list what the library scanner detects
 "build/Veneer Pro.app/Contents/MacOS/VeneerPro" --scan-library "/Library/Application Support/KeyShot Studio/Materials"
 ```
@@ -55,7 +57,13 @@ Headless conversion:
   - **Live updates**: the preview stays live while you work. Material edits, library materials, renames, visibility, transforms and deletions update in the headset within about half a second.
   - **How it works**: the scene is one ordinary USD layer in a USDKit stage, shared once with `USDPreviewSession` and never reopened; every edit changes that same scene. Value edits (colors, roughness, metallic, texture files…) become individual `setValue` calls. Applying a different library material updates the existing material in place: its USD name stays fixed for the session, so the model's parts are never rebound. Only materials whose graph changed are re-evaluated, live textures are baked at up to 1K and named by content, and unchanged bakes are reused. Undo/redo gestures in the headset drive the app's undo history, and the headset's annotation, per-object move and export tools are enabled. Each update is logged to `~/Library/Logs/Veneer Pro/VisionPro.log`.
   - **Unoptimized sharing**: the stage is shared with Spatial Preview's optimization off (`.unmodified`), because an optimized scene can be rebuilt on the headset and then ignores edits.
-  - **Fallback**: if the scene is too heavy to share unoptimized, the app sends a USDZ and re-sends it after every change.
+  - **Heavy models:** Vision Pro only accepts scenes up to a certain complexity for instant live editing (a model of about a million triangles is beyond it). Textures sent to the headset are capped at 2K. Too-heavy models switch automatically to **file mode**: Veneer Pro re-exports and re-sends the model a moment after you stop editing (status: "updates after each edit"). Slower than live, but every change appears, including material swaps and object edits. Only if that fails does the headset get Spatial Preview's simplified copy, which is **view only** because a simplified scene can't take edits (status: "simplified, view only").
+  - **Starting up:**
+    - **Scene format:** live sessions share the scene as text USD, the configuration verified to stream edits. Only the simplified view-only fallback uses binary USD, about 4× smaller (71 → 18 MB for a million-triangle model).
+    - **Progress:** the window's status shows each step, with a percentage while Vision Pro processes the model.
+    - **Time limits:** opening is given 90 seconds, sending a file 3 minutes and simplifying 3 minutes. A step that runs over moves on to the next fallback instead of hanging.
+    - **No restarts:** the Vision Pro button is disabled while connecting.
+    - **Log:** every attempt is logged to `~/Library/Logs/Veneer Pro/VisionPro.log`.
 - **Welcome window**: a quiet splash at launch, like a CAD or photo-editor start screen.
   - **Left:** the app icon and name, Import Model… (⌘O) and a "Show at launch" checkbox.
   - **Right:** recent models (click to reopen), an Import → Apply materials → Refine → View in AR strip (hover a step for details, click to keep it open), and the supported formats on one line.
@@ -80,32 +88,38 @@ Headless conversion:
   - **Sending the file:** AirDrop, Messages and Mail buttons send the current USDZ directly.
   - **Privacy:** links carry a random code and stop working when you click Stop Sharing. Nothing leaves your local network, but anyone on the same Wi-Fi with the link can view the model while sharing is on.
   - **Firewall:** if the macOS firewall is on, allow Veneer Pro to accept incoming connections the first time.
+- **True-scale scenes** (viewer bar's scene button, or Environment → Scale Scene): judge a product's size in context. The scenes are view-only and never exported.
+  - **Materials:** every scene is built from untextured clay shapes at real-world sizes.
+  - **Desk:** 120 × 60 cm, 74 cm high. Toggle **Props**: a 27" monitor, 14" laptop, phone and mug.
+  - **Bedroom:** 3.5 × 3 m with 2.4 m ceilings, a door and a window. Toggle **Bed & nightstands**: a queen bed and two 60 cm nightstands.
+  - **Person:** a 175 cm figure you can toggle in either scene.
+  - **Place On:** desk or floor, or in the bedroom floor, nightstand or bed. The model stands on the chosen surface with a soft contact shadow.
+  - **Size readout:** the top-right of the viewport shows W × D × H of the model, or of the selected object, in cm or inches (click to switch). **Check units** appears when a size looks implausible, e.g. an OBJ modeled in millimeters.
 - **Undo / Redo**: toolbar buttons and ⌘Z / ⇧⌘Z (the Edit menu names the step, e.g. "Undo Apply “Walnut”"). Covers material graph edits (slider drags and node moves become one step), applying or resetting materials, renames, and object visibility, deletion, transforms and material separation. While you're typing in a text field, ⌘Z undoes the typing.
 - **Objects**: the sidebar's **Scene** tab shows the model's object tree, with filtering, an eye toggle to hide (hidden objects export as invisible) and a target button to **isolate** an object (view only, not exported). Clicking a part in the viewport selects its object, outlined in the accent color. The inspector's **Object** tab edits the name, visibility, position/rotation/scale (drag an axis label to scrub), and lists the object's materials. **Give This Object Its Own Materials** copies shared materials so one part can differ from the rest; with an object selected, the material library's Apply button does this automatically and applies to that object only. Frame focuses the selected object.
 - **Viewport**: SceneKit preview with image-based lighting from real HDR environments. Click a surface to select its material.
   - **Environment tab**: Rotation, Brightness and Exposure sliders, background and grid toggles. Your choice is remembered between launches.
-  - **My HDRIs**: **Add HDRI…**, or drop `.hdr`, `.exr`, KeyShot `.hdz`/`.klf` files or folders onto the Environment tab.
-  - **KeyShot**: environments are found automatically in `/Library/Application Support/KeyShot Studio/Environments`, grouped like KeyShot. `.hdr`/`.exr` load directly, `.hdz` (KeyShot's wrapper around a Radiance RGBE image) is converted on the fly, and `.klf` studio and Sun & Sky setups are re-created in HDR from their light pins. Large HDRIs are downsampled to 2K float, keeping highlight values above 1.0 for reflections.
-  - **Built-in**: five procedural HDR studios (Studio, Sunset, Overcast, Night, Warehouse).
+  - **HDRI Library** (Environment tab): switch between **Poly Haven** (about 1,000 HDRIs), **ambientCG** (over 400), **KeyShot** (if installed) and **Mine**.
+    - **Online HDRIs:** they're free CC0 and download when you click them, at 1K, 2K (default) or 4K, then work offline.
+    - **Filters:** a collapsible filter section (setting, time of day, sky, light and contrast) plus search narrows them down.
+  - **Mine**: the built-in **Studio** environment (the offline default when there's no internet), your downloaded HDRIs, and HDRIs you add with **Add HDRI…** or by dropping `.hdr`, `.exr` or KeyShot `.hdz`/`.klf` files or folders onto the Environment tab.
+  - **KeyShot**: environments are found automatically in `/Library/Application Support/KeyShot Studio/Environments`, filterable by KeyShot folder. `.hdr`/`.exr` load directly, `.hdz` (KeyShot's wrapper around a Radiance RGBE image) is converted on the fly, and `.klf` studio and Sun & Sky setups are re-created in HDR from their light pins. Large HDRIs are downsampled to 2K float, keeping highlight values above 1.0 for reflections.
 - **Node material editor**: each material is a graph that ends in a **Surface Output** node (Base Color, Metallic, Roughness, Normal, Emissive, Opacity, Occlusion, Clearcoat, Clearcoat Roughness).
   - Nodes: Color, Value, Image Texture (with tiling and R/G/B/A outputs), Checker, Gradient, Noise, Mix (Mix/Multiply/Screen/Overlay), Math, Invert, Hue/Saturation, Brightness/Contrast, Separate RGBA, Combine RGB, Normal Strength.
   - Drag from an output port to an input port to connect them. Drag a connected input away to disconnect it. Drop image files onto the editor to create texture nodes. Each node shows a live preview.
-- **Veneer Essentials**: a built-in library that always appears first, so the app works with no folders linked. It has 37 materials in 10 categories:
-  - Metal: chrome, brushed aluminum, stainless, anodized, gold, copper.
-  - Plastic: glossy and matte ABS, soft-touch, translucent.
-  - Paint: car paints with clearcoat, satin, matte.
-  - Glass: clear, frosted, smoked.
-  - Rubber and silicone.
-  - Wood: oak, walnut, lacquered maple.
-  - Fabric and leather.
-  - Ceramic and stone: ceramic, terracotta, concrete, marble.
-  - Light: LEDs.
-
-  Plain finishes are single values (a few KB in USDZ). Wood, fabric, stone and brushed metal are procedural node graphs that tile seamlessly and bake to textures on export, and they work with any mapping type. Apply them by name on the command line, e.g. `--material "Walnut"` or `--material "Metal/Gold"`.
-- **Material libraries (KeyShot-style)**: the sidebar's **Materials** tab browses one or more material folders. Switch between them from the library name menu, or add more with **Add Library Folder…**. Your own Visune (`~/Documents/Visune Asset Library/Materials`) and KeyShot (`/Library/Application Support/KeyShot Studio/Materials`) are found automatically. Each library has category and subcategory chips, search, and preview thumbnails.
+- **Material libraries (KeyShot-style)**: the sidebar's **Materials** tab browses one or more material folders. Switch between them from the library name menu, or add more with **Add Library Folder…**. Your own Visune (`~/Documents/Visune Asset Library/Materials`) and KeyShot (`/Library/Application Support/KeyShot Studio/Materials`) are found automatically. Each library has a collapsible **Filters** section (category, then subcategory), search, and preview thumbnails.
   - **Applying**: double-click a material to apply it to the selected material, or drag it onto a part in the viewport or onto the node editor. The node graph is filled in automatically.
   - **Texture-map folders** (Visune, ambientCG, Poliigon…): maps are matched by filename suffix (`_Diffuse`/`_Albedo`/`_Color`, `_Roughness`, `_Glossiness`, `_Metallic`, `_NormalGL`/`_NormalDX`, `_AO`, `_Opacity`, `_Emissive`). Glossiness goes through an **Invert** node; DirectX normals go through **Separate → Invert G → Combine**.
   - **KeyShot `.mtl` files**: the shader graph is read and about 30 KeyShot surface types are mapped to PBR values. Texture chains become real nodes: `texture2` → Image Texture, `lux_color_adjust` → Hue/Saturation, `convert_rgba_to_float` → **Map Range**. Bump maps in normal-map mode become the Normal input. Roughness is converted the same way KeyShot's own USD export does (√roughness), and KeyShot's measured metal presets (gold, copper, chrome…) become their physical reflectance colors. Thumbnails come from the preview KeyShot embeds in each file. KeyShot 14's binary `.mtl` format is supported through its texture maps.
+  - **Poly Haven & ambientCG**: two free CC0 libraries, browsable right in the library menu with no account or setup. That's about 870 Poly Haven materials (scanned, up to 8K) and over 2,000 from ambientCG.
+    - **Downloading:** applying a material downloads only the maps Veneer Pro uses (color, normal, roughness/metal/AO) at your Max Texture size, capped at 4K.
+    - **Offline:** downloads are kept in a **Downloaded** library, so they work offline.
+    - **Credit:** the library shows "Powered by Poly Haven" while browsing it, as Poly Haven's API terms require.
+    - **Command line:** `--material polyhaven:rusty_metal_02` or `--material ambientcg:Metal063`.
+  - **Substance 3D Assets**: texture sets exported from Substance apps use Substance's naming: `_BaseColor`, `_Normal_OpenGL` / `_Normal_DirectX`, `_Roughness`, `_Metallic`, `_Mixed_AO` / `_AmbientOcclusion`, `_Emissive` and `_Opacity`.
+    - **Packed maps:** a packed `_OcclusionRoughnessMetallic` map (Unreal export preset, glTF ORM) is wired R → Occlusion, G → Roughness, B → Metallic as one texture.
+    - **`.sbsar` archives:** they appear in the library with an **S** badge. When applied, their outputs are rendered with Adobe's `sbsrender` (included with Adobe Substance 3D Designer) at up to 2K and cached. Without it, export the material's maps as PNG from a Substance app instead.
+    - **Auto-detection:** Substance folders under `~/Documents/Adobe` are picked up automatically.
   - **Approximations**: procedural patterns (wood, noise, brushed) are flattened to their average color. Colors KeyShot doesn't expose (encrypted Axalta/DuPont paints, coated or anodized metals) are sampled from KeyShot's own preview render. Glass is built from its transmission tint, since USDZ has no refraction.
   - **Max Texture**: downsamples large maps (default 2K). 16-bit maps are converted to 8-bit, and large opaque PNGs are stored as high-quality JPEG, to keep USDZ files AR-friendly.
   - **Texture Tiling**: a control in the material inspector that repeats every texture in the material.
@@ -136,7 +150,7 @@ Headless conversion:
 
 ## Disclaimer
 
-Veneer Pro is an independent project and isn't affiliated with or endorsed by Apple, Visune or Luxion (KeyShot). It doesn't include any Visune or KeyShot content. It reads libraries you already have installed, and the built-in Veneer Essentials materials are original. Apple Vision Pro, AR Quick Look, Reality Converter and USDZ are trademarks or technologies of Apple Inc.
+Veneer Pro is an independent project and isn't affiliated with or endorsed by Apple, Visune or Luxion (KeyShot). It doesn't include any Visune or KeyShot content. It reads libraries you already have installed. Online materials come from [Poly Haven](https://polyhaven.com) and [ambientCG](https://ambientcg.com) under CC0, downloaded only when you apply them. Apple Vision Pro, AR Quick Look, Reality Converter and USDZ are trademarks or technologies of Apple Inc.
 
 ## License
 

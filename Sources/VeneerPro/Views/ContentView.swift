@@ -58,10 +58,11 @@ struct ContentView: View {
                         Label(model.visionPro.isActive ? "Stop Vision Pro Preview" : "View on Apple Vision Pro",
                               systemImage: model.visionPro.isActive ? "visionpro.fill" : "visionpro")
                     }
-                    .help(model.visionPro.isActive
-                          ? "Stop the live preview on Apple Vision Pro"
+                    .help(model.visionPro.isConnecting ? "Connecting to Apple Vision Pro…"
+                          : model.visionPro.isActive ? "Stop the live preview on Apple Vision Pro"
                           : "Open this model on Apple Vision Pro; material and object edits update live")
-                    .disabled((model.selectedDocument == nil && !model.visionPro.isActive) || model.isBusy)
+                    // Disabled while connecting: a second press used to restart, and cancel, a slow start.
+                    .disabled((model.selectedDocument == nil && !model.visionPro.isActive) || model.isBusy || model.visionPro.isConnecting)
                     Button { model.showShareSheet = true } label: {
                         Label("Share to iPhone or iPad", systemImage: model.share.isActive ? "qrcode.viewfinder" : "qrcode")
                     }
@@ -158,6 +159,14 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .allowsHitTesting(false)
             }
+            if let document = model.selectedDocument {
+                SizeReadout(document: document, node: model.selectedNode) {
+                    model.inspectorTab = .properties
+                    model.showInspector = true
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            }
             if model.selectedDocument != nil {
                 CanvasHUD {
                     HUDButton(symbol: "viewfinder", help: model.selectedNode == nil ? "Frame the model" : "Frame the selected object") {
@@ -170,6 +179,7 @@ struct ContentView: View {
                         model.viewer.showEnvironment.toggle()
                     }
                     HUDButton(symbol: "sun.max", help: "Lighting") { model.inspectorTab = .environment; model.showInspector = true }
+                    ScaleSceneMenu(scene: Binding(get: { model.viewer.scaleScene }, set: { model.viewer.scaleScene = $0 }))
                     if model.selectedDocument?.hasAnimations == true {
                         HUDButton(symbol: model.viewer.isPlaying ? "pause.fill" : "play.fill", help: "Play or pause animation") {
                             model.viewer.isPlaying.toggle()
@@ -203,6 +213,7 @@ struct ContentView: View {
 
     private func toggleVisionPro() {
         let preview = model.visionPro
+        guard !preview.isConnecting else { return }
         if preview.isActive {
             Task { await preview.stop() }
             return
@@ -244,28 +255,31 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder
+    /// The node editor pane. Its outer container never changes identity: the split view hosts each pane
+    /// in its own view, and replacing a pane (as switching materials used to) makes the split view lay
+    /// out again, briefly resizing the viewport — a split-second "zoom". Only the contents swap.
     private var editor: some View {
-        if let entry = model.selectedMaterial {
-            NodeEditorView(entry: entry)
-                .id(entry.id)
-                .overlay(alignment: .topTrailing) {
-                    Text(entry.name)
-                        .font(.system(size: 12, weight: .semibold))
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-                        .padding(10)
-                        .environment(\.colorScheme, .dark)
-                }
-        } else {
-            ZStack {
-                Color(white: 0.11)
+        ZStack {
+            Color(white: 0.11)
+            if let entry = model.selectedMaterial {
+                NodeEditorView(entry: entry)
+                    .id(entry.id)
+                    .overlay(alignment: .topTrailing) {
+                        Text(entry.name)
+                            .font(.system(size: 12, weight: .semibold))
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                            .padding(10)
+                            .environment(\.colorScheme, .dark)
+                    }
+            } else {
                 Text(model.selectedDocument == nil ? "Import a model to edit its materials"
                                                    : "Select a material — or click a surface in the viewport")
                     .foregroundStyle(.secondary)
+                    .environment(\.colorScheme, .dark)
             }
-            .environment(\.colorScheme, .dark)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

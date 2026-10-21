@@ -284,6 +284,25 @@ final class ModelDocument: Identifiable {
         NotificationCenter.default.post(name: .sceneDidChange, object: self)
     }
 
+    /// Real-world size (meters) of the visible geometry under `node` (default: the whole model), as
+    /// width (X), height (Y, up) and depth (Z) in the viewer's upright frame.
+    func size(of node: SCNNode? = nil) -> SIMD3<Float>? {
+        let target = node ?? root
+        var lo = SIMD3<Float>(repeating: .greatestFiniteMagnitude), hi = -lo
+        target.enumerateHierarchy { child, _ in
+            guard child.geometry != nil, !child.isHidden else { return }
+            let (a, b) = child.boundingBox
+            for corner in 0..<8 {
+                let p = SCNVector3(corner & 1 == 0 ? a.x : b.x, corner & 2 == 0 ? a.y : b.y, corner & 4 == 0 ? a.z : b.z)
+                let w = SIMD3<Float>(child.convertPosition(p, to: nil))
+                lo = simd_min(lo, w)
+                hi = simd_max(hi, w)
+            }
+        }
+        guard lo.x <= hi.x else { return nil }
+        return (hi - lo) * Float(metadata.metersPerUnit)
+    }
+
     /// The material entries used by a node's own geometry.
     func entries(for node: SCNNode) -> [MaterialEntry] {
         let used = node.geometry?.materials ?? []

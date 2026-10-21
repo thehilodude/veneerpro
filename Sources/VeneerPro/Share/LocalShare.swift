@@ -3,6 +3,7 @@ import Darwin
 import Network
 import Observation
 import SceneKit
+import SystemConfiguration
 
 /// Shares the selected model with iPhones and iPads on the same Wi-Fi — no app or App Store needed.
 ///
@@ -36,6 +37,10 @@ final class LocalShare {
     @ObservationIgnored private var token = ""
     @ObservationIgnored private var version = 0
     @ObservationIgnored private var thumbnail: Data?
+    @ObservationIgnored private var iconPNG: Data?
+    /// "W 30.8 · D 43.2 · H 62.6 cm" and the material count, shown on the page.
+    @ObservationIgnored private var sizeText = ""
+    @ObservationIgnored private var materialCount = 0
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var exportTask: Task<Void, Never>?
     @ObservationIgnored private var pendingExport = false
@@ -143,6 +148,12 @@ final class LocalShare {
             fileURL = url
             lastUpdated = Date()
             if let image = snapshot?(), let png = Self.png(image, maxSize: 900) { thumbnail = png }
+            if iconPNG == nil { iconPNG = Self.png(NSApp.applicationIconImage, maxSize: 128) }
+            materialCount = document.materials.count
+            if let size = document.size() {
+                func cm(_ m: Float) -> String { let v = Double(m) * 100; return v >= 100 ? String(format: "%.0f", v) : String(format: "%.1f", v) }
+                sizeText = "W \(cm(size.x)) · D \(cm(size.z)) · H \(cm(size.y)) cm"
+            }
         } catch {
             status = .failed(error.localizedDescription)
         }
@@ -182,6 +193,8 @@ final class LocalShare {
             }
             send(connection, status: "200 OK", type: "model/vnd.usdz+zip", body: data,
                  extraHeaders: ["Content-Disposition": "inline; filename=\"\(Self.safeName(document?.name ?? "Model")).usdz\""])
+        case "icon.png":
+            send(connection, status: iconPNG == nil ? "404 Not Found" : "200 OK", type: "image/png", body: iconPNG ?? Data())
         case "thumb.png":
             send(connection, status: thumbnail == nil ? "404 Not Found" : "200 OK", type: "image/png", body: thumbnail ?? Data())
         case "version":
@@ -200,49 +213,121 @@ final class LocalShare {
         connection.send(content: Data(head.utf8) + body, completion: .contentProcessed { _ in connection.cancel() })
     }
 
-    /// The phone's landing page: a big tappable preview that opens AR Quick Look, and a watcher that
-    /// offers the newest version after edits on the Mac.
+    /// The phone's landing page, styled like the desktop app: dark canvas, a rounded preview card (Safari adds its
+    /// AR badge to the image) with a status capsule, the size readout, and an accent "View in AR" button that opens AR Quick Look.
+    /// It polls for newer versions after edits on the Mac.
     private func page() -> String {
         let name = Self.html(document?.name ?? "Model")
         let v = fileURL == nil ? 0 : version
+        let size = Self.html(sizeText)
+        let materials = materialCount == 1 ? "1 material" : "\(materialCount) materials"
+        let mac = Self.html(Self.computerName)
+        let ar = "model.usdz?v=\(v)#allowsContentScaling=1"
+        // SF-style glyphs as inline SVG (AR cube, and a refresh arrow).
+        let arIcon = #"<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg>"#
         return """
         <!doctype html>
         <html><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        <meta name="theme-color" content="#131313">
         <title>\(name) · Veneer Pro</title>
         <style>
-          :root { color-scheme: dark; }
-          body { margin: 0; font: 16px -apple-system, system-ui, sans-serif; background: #161617; color: #f2f2f2;
-                 display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-          main { width: min(92vw, 520px); padding: 28px 0 40px; text-align: center; }
-          .brand { font-size: 13px; color: #8d8d92; letter-spacing: .02em; }
-          h1 { font-size: 26px; margin: 6px 0 20px; }
-          a.ar { display: block; border-radius: 22px; overflow: hidden; background: #232325; box-shadow: 0 12px 40px #0008; }
-          a.ar img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
-          .button { display: block; margin-top: 18px; padding: 15px; border-radius: 14px; background: #2f7cf6;
-                    color: white; font-weight: 600; text-decoration: none; font-size: 17px; }
-          .note { margin-top: 14px; color: #8d8d92; font-size: 13px; line-height: 1.4; }
-          #update { display: none; margin-top: 14px; padding: 12px; border-radius: 12px; background: #2b2b2e; color: #ffd166; }
-          #update a { color: #ffd166; font-weight: 600; }
+          :root {
+            color-scheme: dark;
+            --canvas: #131313; --panel: #222223; --control: rgba(255,255,255,.075); --hairline: rgba(255,255,255,.08);
+            --text: #f2f2f2; --secondary: rgba(235,235,245,.6); --tertiary: rgba(235,235,245,.32);
+            --accent: #0a84ff; --red: #e63228; --yellow: #ffc107; --blue: #1f5fd8;
+          }
+          * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+          body { margin: 0; background: var(--canvas); color: var(--text);
+                 font: 15px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+          main { max-width: 560px; margin: 0 auto; padding: max(16px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom)); }
+          header { display: flex; align-items: center; gap: 10px; margin: 4px 2px 18px; }
+          header img { width: 34px; height: 34px; border-radius: 8px; }
+          header .app { font-weight: 700; font-size: 15px; }
+          header .from { font-size: 12px; color: var(--secondary); }
+          .panel { background: var(--panel); border: 1px solid var(--hairline); border-radius: 16px; overflow: hidden; }
+          .title { padding: 16px 16px 12px; }
+          h1 { font-size: 22px; margin: 0 0 8px; letter-spacing: -.01em; }
+          .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+          .chip { font-size: 12px; font-weight: 500; padding: 4px 9px; border-radius: 999px; background: var(--control);
+                  color: var(--secondary); font-variant-numeric: tabular-nums; }
+          .canvas { position: relative; margin: 0 10px; border-radius: 12px; overflow: hidden; background: var(--canvas);
+                    border: 1px solid var(--hairline); }
+          .canvas a, .canvas img { display: block; width: 100%; }
+          .canvas img { aspect-ratio: 4 / 3; object-fit: cover; }
+          .status { position: absolute; left: 10px; top: 10px; display: flex; align-items: center; gap: 6px; padding: 5px 10px;
+                    border-radius: 999px; font-size: 11.5px; font-weight: 500; color: var(--secondary);
+                    background: rgba(40,40,42,.55); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+                    border: 1px solid rgba(255,255,255,.1); }
+          .dot { width: 7px; height: 7px; border-radius: 50%; background: #30d158; }
+          .dot.busy { background: var(--yellow); animation: pulse 1s ease-in-out infinite; }
+          @keyframes pulse { 50% { opacity: .35; } }
+          .actions { padding: 12px 10px 10px; }
+          .button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 12px;
+                    background: var(--accent); color: white; font-weight: 600; font-size: 16px; text-decoration: none; }
+          .button img { position: absolute; width: 1px; height: 1px; opacity: 0; }
+          .steps { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 14px 0 0; }
+          .step { background: var(--control); border-radius: 11px; padding: 10px 6px; text-align: center; font-size: 11.5px; color: var(--secondary); }
+          .step b { display: block; font-size: 15px; margin-bottom: 3px; }
+          .button.update { background: var(--yellow); color: #1a1a1a; animation: glow 1.6s ease-in-out infinite; }
+          @keyframes glow { 50% { box-shadow: 0 0 0 5px rgba(255,193,7,.3); } }
+          .notice { display: none; margin: 0 2px 10px; font-size: 12.5px; color: var(--secondary); text-align: center; }
+          footer { margin-top: 16px; text-align: center; font-size: 11.5px; line-height: 1.5; color: var(--tertiary); }
         </style></head>
         <body><main>
-          <div class="brand">Shared from Veneer Pro</div>
-          <h1>\(name)</h1>
-          <a class="ar" rel="ar" href="model.usdz?v=\(v)#allowsContentScaling=1">
-            <img src="thumb.png?v=\(v)" alt="\(name)" onerror="this.style.minHeight='200px'">
-          </a>
-          <a class="button" rel="ar" href="model.usdz?v=\(v)#allowsContentScaling=1"><img src="thumb.png?v=\(v)" width="1" height="1" style="opacity:0;position:absolute" alt="">View in AR</a>
-          <div id="update">The model was updated on the Mac. <a href="./">Load the latest version</a></div>
-          <div class="note">Opens in AR Quick Look on iPhone and iPad.<br>Keep this page open — it tells you when there’s a newer version.</div>
+          <header>
+            <img src="icon.png" alt="">
+            <div><div class="app">Veneer Pro</div><div class="from">Shared from \(mac)</div></div>
+          </header>
+          <section class="panel">
+            <div class="title">
+              <h1>\(name)</h1>
+              <div class="chips">\(size.isEmpty ? "" : "<span class=\"chip\">\(size)</span>")<span class="chip">\(materials)</span></div>
+            </div>
+            <div class="canvas">
+              <a id="preview" rel="ar" href="\(ar)"><img src="thumb.png?v=\(v)" alt="\(name)" onerror="this.style.minHeight='220px'"></a>
+              <div class="status"><span class="dot" id="dot"></span><span id="state">Up to date</span></div>
+            </div>
+            <div class="actions">
+              <div class="notice" id="notice">A newer version is ready on the Mac.</div>
+              <a class="button" id="action" rel="ar" href="\(ar)"><img src="thumb.png?v=\(v)" alt="">\(arIcon) View in AR</a>
+            </div>
+          </section>
+          <div class="steps">
+            <div class="step"><b style="color: var(--red)">1</b>Tap View in AR</div>
+            <div class="step"><b style="color: var(--yellow)">2</b>Place it on a surface</div>
+            <div class="step"><b style="color: var(--blue)">3</b>Pinch to scale, drag to move</div>
+          </div>
+          <footer>Opens in AR Quick Look at true size.<br>Keep this page open — the button changes when there’s a newer version from the Mac.</footer>
         </main>
         <script>
           const shown = \(v);
+          let updated = false;
+          const refreshIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>';
           setInterval(async () => {
             try {
               const r = await fetch('version', { cache: 'no-store' });
               const j = await r.json();
-              if (j.version > shown) document.getElementById('update').style.display = 'block';
-            } catch (e) {}
+              const newer = j.version > shown;
+              if (newer && !updated) {
+                // The main button becomes the way to the new version, and the old one can't be opened in AR.
+                updated = true;
+                for (const link of [document.getElementById('action'), document.getElementById('preview')]) {
+                  link.removeAttribute('rel');
+                  link.href = './';
+                }
+                const action = document.getElementById('action');
+                action.classList.add('update');
+                action.innerHTML = refreshIcon + ' Load New Version';
+                document.getElementById('notice').style.display = 'block';
+              }
+              document.getElementById('dot').className = j.exporting ? 'dot busy' : 'dot';
+              document.getElementById('state').textContent = j.exporting ? 'Updating…' : (newer ? 'Update ready' : 'Up to date');
+            } catch (e) {
+              document.getElementById('state').textContent = 'Mac not reachable';
+              document.getElementById('dot').className = 'dot busy';
+            }
           }, 3000);
         </script>
         </body></html>
@@ -250,6 +335,9 @@ final class LocalShare {
     }
 
     // MARK: Helpers
+
+    /// The Mac's name ("Kevin's MacBook Pro"), read from System Configuration (fast, unlike Host lookups).
+    private static let computerName: String = (SCDynamicStoreCopyComputerName(nil, nil) as String?) ?? "your Mac"
 
     /// The Mac's IPv4 address on Wi-Fi or Ethernet.
     private static func localAddress() -> String? {

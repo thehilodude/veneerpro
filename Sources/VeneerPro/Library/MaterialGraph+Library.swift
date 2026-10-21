@@ -62,12 +62,23 @@ extension MaterialGraph {
         }
 
         if let id = textureNode(.occlusion) { wire(id, 1, .occlusion) }
+        // A packed Occlusion/Roughness/Metallic map (R/G/B) fills whichever of those has no map of its own.
+        if textures[.packedORM] != nil {
+            let needsOcclusion = textures[.occlusion] == nil
+            let needsRoughness = textures[.roughness] == nil && textures[.glossiness] == nil
+            let needsMetallic = textures[.metallic] == nil
+            if needsOcclusion || needsRoughness || needsMetallic, let id = textureNode(.packedORM) {
+                if needsOcclusion { wire(id, 1, .occlusion) }
+                if needsRoughness { wire(id, 2, .roughness) }
+                if needsMetallic { wire(id, 3, .metallic) }
+            }
+        }
         if let id = textureNode(.opacity) { wire(id, 1, .opacity) }
         if let id = textureNode(.emissive) { wire(id, 0, .emissive) }
 
         // Fill what the maps don't cover from the KeyShot material (or the preview render).
         if let ks = keyShot {
-            if textures[.metallic] == nil, ks.metallic > 0 { setOutput(.metallic, NodeKind.gray(ks.metallic)) }
+            if textures[.metallic] == nil, textures[.packedORM] == nil, ks.metallic > 0 { setOutput(.metallic, NodeKind.gray(ks.metallic)) }
             if textures[.opacity] == nil, ks.opacity < 1 { setOutput(.opacity, NodeKind.gray(ks.opacity)) }
             if ks.clearcoat > 0 {
                 setOutput(.clearcoat, NodeKind.gray(ks.clearcoat))

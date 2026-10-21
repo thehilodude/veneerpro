@@ -58,9 +58,14 @@ final class AppModel {
         guard let entry = entry ?? selectedMaterial else { return }
         selectedMaterialID = entry.id
         Task {
-            status = "Applying “\(material.name)”"
+            status = material.onlineAsset.map { "Downloading “\(material.name)” from \($0.provider.displayName)" }
+                ?? (material.isSubstanceArchive ? "Rendering “\(material.name)” with Substance" : "Applying “\(material.name)”")
             await library.apply(material, to: entry)
             status = nil
+            if let error = library.applyError {
+                library.applyError = nil
+                errorMessage = error
+            }
         }
     }
 
@@ -199,10 +204,13 @@ struct ViewerSettings: Equatable {
     var showGrid = true
     var exposure: Double = 0
     var isPlaying = true
+    /// A true-scale clay setting around the model (view-only).
+    var scaleScene = ScaleScene()
 
     private enum Keys {
         static let environment = "ViewerEnvironment", rotation = "ViewerEnvironmentRotation"
         static let intensity = "ViewerEnvironmentIntensity", exposure = "ViewerExposure"
+        static let scaleScene = "ViewerScaleScene"
     }
 
     /// The last-used lighting setup, so a chosen HDRI sticks between launches.
@@ -215,6 +223,9 @@ struct ViewerSettings: Equatable {
         settings.environmentRotation = defaults.double(forKey: Keys.rotation)
         if defaults.object(forKey: Keys.intensity) != nil { settings.environmentIntensity = defaults.double(forKey: Keys.intensity) }
         settings.exposure = defaults.double(forKey: Keys.exposure)
+        if let data = defaults.data(forKey: Keys.scaleScene), let scene = try? JSONDecoder().decode(ScaleScene.self, from: data) {
+            settings.scaleScene = scene
+        }
         return settings
     }
 
@@ -224,6 +235,7 @@ struct ViewerSettings: Equatable {
         defaults.set(environmentRotation, forKey: Keys.rotation)
         defaults.set(environmentIntensity, forKey: Keys.intensity)
         defaults.set(exposure, forKey: Keys.exposure)
+        defaults.set(try? JSONEncoder().encode(scaleScene), forKey: Keys.scaleScene)
     }
 }
 

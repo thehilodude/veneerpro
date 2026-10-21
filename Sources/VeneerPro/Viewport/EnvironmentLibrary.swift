@@ -16,9 +16,13 @@ enum EnvironmentSource: Hashable, Identifiable {
 
     var name: String {
         switch self {
-        case let .preset(p): p.rawValue
-        case let .file(url): url.deletingPathExtension().lastPathComponent
-            .replacingOccurrences(of: " 4K", with: "").replacingOccurrences(of: "_", with: " ")
+        case let .preset(p): return p.rawValue
+        case let .file(url):
+            // Downloads use their library name; other files their cleaned-up file name ("aarfontein_dawn_2_2K" → "aarfontein dawn 2").
+            if let name = OnlineLibrary.displayName(forDownloaded: url) { return name }
+            return url.deletingPathExtension().lastPathComponent
+                .replacingOccurrences(of: #"[ _](1|2|4|8|16)[kK]$"#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: "_", with: " ")
         }
     }
 
@@ -118,7 +122,8 @@ private final class PixelsBox {
     init(_ pixels: HDRPixels) { self.pixels = pixels }
 }
 
-/// The environments offered in the viewer: built-ins, the user's own HDRIs, and KeyShot's library.
+/// The environments offered in the viewer: the offline Studio default, Poly Haven and ambientCG HDRIs
+/// (downloaded on demand), the user's own HDRIs, and KeyShot's library.
 @MainActor
 @Observable
 final class EnvironmentLibrary {
@@ -129,6 +134,14 @@ final class EnvironmentLibrary {
     }
 
     private(set) var custom: [URL] = []
+    /// HDRIs downloaded from Poly Haven / ambientCG.
+    private(set) var downloaded: [URL] = []
+    private(set) var onlineCatalogs: [OnlineLibrary.Provider: [OnlineHDRI]] = [:]
+    private(set) var loadingCatalogs: Set<OnlineLibrary.Provider> = []
+    private(set) var catalogErrors: [OnlineLibrary.Provider: String] = [:]
+    /// Online HDRIs being downloaded (by id).
+    private(set) var downloading: Set<String> = []
+    var downloadError: String?
     private(set) var keyShotGroups: [Group] = []
     private(set) var keyShotRoot: URL?
     @ObservationIgnored private let thumbnails = NSCache<NSString, CGImage>()
@@ -146,10 +159,80 @@ final class EnvironmentLibrary {
             custom = existing + custom.filter { !stored.contains($0) }
             keyShotRoot = root
             scanKeyShot()
+            refreshDownloaded()
         }
     }
 
-    var builtIn: [EnvironmentSource] { EnvironmentPreset.allCases.map { .preset($0) } }
+    /// The offline default.
+    var builtIn: [EnvironmentSource] { [.preset(.studio)] }
+
+    // MARK: Online HDRIs
+
+    func loadCatalog(_ provider: OnlineLibrary.Provider, force: Bool = false) {
+        guard force || (onlineCatalogs[provider] == nil && !loadingCatalogs.contains(provider)) else { return }
+        loadingCatalogs.insert(provider)
+        catalogErrors[provider] = nil
+        Task {
+            do {
+                onlineCatalogs[provider] = try await OnlineLibrary.hdriCatalog(provider)
+            } catch {
+                catalogErrors[provider] = "Couldn’t reach \(provider.displayName). Check your internet connection."
+            }
+            loadingCatalogs.remove(provider)
+        }
+    }
+
+    /// The local file for an online HDRI, if it's been downloaded.
+    func localFile(_ item: OnlineHDRI) -> URL? {
+        downloaded.first { $0.deletingLastPathComponent().lastPathComponent == item.source.displayName
+            && $0.lastPathComponent.hasPrefix(item.assetID + "_") }
+    }
+
+    /// Downloads (if needed) and returns the environment for an online HDRI.
+    func environment(for item: OnlineHDRI, resolution: String) async -> EnvironmentSource? {
+        if let local = localFile(item), local.deletingPathExtension().lastPathComponent.hasSuffix("_" + resolution.uppercased()) {
+            return .file(local)
+        }
+        downloading.insert(item.id)
+        defer { downloading.remove(item.id) }
+        do {
+            let file = try await OnlineLibrary.downloadHDRI(item, resolution: resolution)
+            refreshDownloaded()
+            return .file(file)
+        } catch {
+            downloadError = "Couldn’t download “\(item.name)” from \(item.source.displayName). \(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    func refreshDownloaded() {
+        let root = OnlineLibrary.hdriFolder
+        Task {
+            downloaded = await Task.detached(priority: .utility) { () -> [URL] in
+                let all = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])?
+                    .allObjects as? [URL] ?? []
+                return all.filter { EnvironmentLoader.fileExtensions.contains($0.pathExtension.lowercased()) }
+                    .sorted { $0.lastPathComponent.localizedLowercase < $1.lastPathComponent.localizedLowercase }
+            }.value
+        }
+    }
+
+    func removeDownloaded(_ url: URL) {
+        try? FileManager.default.removeItem(at: url)
+        downloaded.removeAll { $0 == url }
+    }
+
+    func cachedThumbnail(_ item: OnlineHDRI) -> CGImage? { thumbnails.object(forKey: item.id as NSString) }
+
+    func thumbnail(_ item: OnlineHDRI) async -> CGImage? {
+        if let cached = cachedThumbnail(item) { return cached }
+        guard let url = item.thumbnail.flatMap(URL.init(string:)), let data = await OnlineLibrary.thumbnailData(url),
+              let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 320]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        thumbnails.setObject(image, forKey: item.id as NSString)
+        return image
+    }
 
     /// `…/KeyShot Studio/Environments` (or an older KeyShot version's), if installed.
     nonisolated static func detectKeyShotEnvironments() -> URL? {

@@ -9,6 +9,8 @@ enum MapKind: String, CaseIterable, Comparable {
     case normalGL = "Normal (GL)"
     case normalDX = "Normal (DX)"
     case occlusion = "Occlusion"
+    /// Occlusion, roughness and metallic packed into R, G and B (Substance's Unreal export, glTF ORM).
+    case packedORM = "Occlusion/Roughness/Metallic"
     case opacity = "Opacity"
     case emissive = "Emissive"
     case height = "Height"
@@ -24,8 +26,10 @@ enum MapKind: String, CaseIterable, Comparable {
 
     private static let keywords: [(MapKind, [String])] = [
         (.preview, ["sphere", "preview", "thumb", "thumbnail", "render", "swatch"]),
-        (.normalDX, ["normaldx", "nrmdx", "normal-dx", "dx"]),
-        (.normalGL, ["normalgl", "nrmgl", "normal-gl", "gl", "normal", "normals", "nrm", "nor", "norm"]),
+        (.packedORM, ["occlusionroughnessmetallic", "orm", "occlusionroughnessmetalness", "aorm"]),
+        // Substance exports name normal maps "Normal_OpenGL" / "Normal_DirectX".
+        (.normalDX, ["normaldx", "nrmdx", "normal-dx", "dx", "directx", "normaldirectx"]),
+        (.normalGL, ["normalgl", "nrmgl", "normal-gl", "gl", "opengl", "normalopengl", "normal", "normals", "nrm", "nor", "norm"]),
         (.baseColor, ["diffuse", "albedo", "basecolor", "base-color", "color", "colour", "col", "diff", "base"]),
         (.roughness, ["roughness", "rough", "rgh"]),
         (.glossiness, ["glossiness", "gloss"]),
@@ -62,6 +66,12 @@ struct LibraryMaterial: Identifiable, Hashable {
     let category: String
     let maps: [MapKind: URL]
     let keyShotFile: URL?
+    /// A Substance archive (`.sbsar`, e.g. from Substance 3D Assets); its maps are rendered on apply.
+    var substanceArchive: URL? = nil
+    /// A Poly Haven / ambientCG material, downloaded when applied.
+    var onlineAsset: OnlineAsset? = nil
+
+    var isSubstanceArchive: Bool { substanceArchive != nil }
 
     /// A standalone KeyShot material (no texture-map folder); its thumbnail is embedded in the file.
     var isKeyShotFile: Bool { location == keyShotFile }
@@ -69,7 +79,7 @@ struct LibraryMaterial: Identifiable, Hashable {
     var preview: URL? { maps[.preview] ?? maps[.baseColor] }
 
     /// A map folder with no texture maps: the look comes only from KeyShot parameters (procedurals, glass...).
-    var isProcedural: Bool { !isKeyShotFile && maps.keys.allSatisfy { $0 == .preview } }
+    var isProcedural: Bool { !isKeyShotFile && !isSubstanceArchive && onlineAsset == nil && maps.keys.allSatisfy { $0 == .preview } }
 
     var usableMaps: [MapKind] { maps.keys.filter { $0 != .preview }.sorted() }
 
@@ -80,9 +90,12 @@ struct LibraryMaterial: Identifiable, Hashable {
     static func materials(inFolder folder: URL, files: [URL], root: URL) -> [LibraryMaterial] {
         var maps: [MapKind: URL] = [:]
         var keyShotFiles: [URL] = []
+        var archives: [URL] = []
         for file in files {
             let ext = file.pathExtension.lowercased()
-            if ext == "mtl", KeyShotDocument.isKeyShotFile(file) {
+            if ext == "sbsar" {
+                archives.append(file)
+            } else if ext == "mtl", KeyShotDocument.isKeyShotFile(file) {
                 keyShotFiles.append(file)
             } else if imageExtensions.contains(ext), let kind = MapKind.classify(file) {
                 // Prefer PNG/JPEG over formats USDZ can't hold.
@@ -91,23 +104,32 @@ struct LibraryMaterial: Identifiable, Hashable {
             }
         }
         let hasMaps = maps.keys.contains { $0 != .preview && !$0.isUnsupported }
+        // Substance archives: one material each, alongside whatever else the folder holds.
+        let substance = archives.map { file in
+            LibraryMaterial(location: file, name: file.deletingPathExtension().lastPathComponent,
+                            category: relativePath(folder, root: root), maps: [:], keyShotFile: nil, substanceArchive: file)
+        }
 
         if hasMaps || (keyShotFiles.count == 1 && maps[.preview] != nil) {
             // A map folder (Visune style): one material named after the folder.
             return [LibraryMaterial(location: folder, name: folder.lastPathComponent,
                                     category: relativePath(folder.deletingLastPathComponent(), root: root),
-                                    maps: maps, keyShotFile: keyShotFiles.first)]
+                                    maps: maps, keyShotFile: keyShotFiles.first)] + substance
         }
         // A KeyShot category folder: one material per .mtl file.
         let category = relativePath(folder, root: root)
         return keyShotFiles.map { file in
             LibraryMaterial(location: file, name: file.deletingPathExtension().lastPathComponent,
                             category: category, maps: [:], keyShotFile: file)
-        }
+        } + substance
     }
 
     /// A material from an explicit folder or `.mtl` path (used by the command line).
     static func from(path: URL) -> LibraryMaterial? {
+        if path.pathExtension.lowercased() == "sbsar" {
+            return materials(inFolder: path.deletingLastPathComponent(), files: [path],
+                             root: path.deletingLastPathComponent()).first
+        }
         if path.pathExtension.lowercased() == "mtl" {
             return materials(inFolder: path.deletingLastPathComponent(), files: [path],
                              root: path.deletingLastPathComponent()).first

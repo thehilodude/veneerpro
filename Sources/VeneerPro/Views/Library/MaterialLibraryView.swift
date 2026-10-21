@@ -13,9 +13,22 @@ struct MaterialLibraryView: View {
         VStack(spacing: 0) {
             header
             if library.root != nil {
+                if let provider = library.root.flatMap(OnlineLibrary.Provider.init(source:)) {
+                    // Required by Poly Haven's API terms; appreciated by ambientCG.
+                    Link(destination: provider.website) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "globe")
+                            Text("\(provider.credit) · Free CC0 materials")
+                        }
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    }
+                    .padding(.bottom, 6)
+                }
                 searchField(text: $library.searchText)
-                categoryChips
                 Divider()
+                // Filters scroll with the grid: a long list of categories must never grow the sidebar
+                // taller than the window (that pushes the whole window's layout around).
                 grid
                 Divider()
                 footer
@@ -48,7 +61,11 @@ struct MaterialLibraryView: View {
                 Divider()
                 Button("Add Library Folder…") { model.library.addFolder() }
                 if let root = library.root {
-                    if !BuiltInMaterials.isBuiltIn(root) {
+                    if let provider = OnlineLibrary.Provider(source: root) {
+                    Button("Refresh \(provider.displayName)") { model.library.rescan() }
+                    Button("Visit \(provider.displayName)") { NSWorkspace.shared.open(provider.website) }
+                }
+                if !OnlineLibrary.isOnline(root) {
                     Button("Rescan “\(library.displayName(root))”") { model.library.rescan() }
                     Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([root]) }
                     Divider()
@@ -83,7 +100,8 @@ struct MaterialLibraryView: View {
     }
 
     private static func icon(_ source: URL) -> String {
-        if BuiltInMaterials.isBuiltIn(source) { return "sparkles" }
+        if OnlineLibrary.isOnline(source) { return "globe" }
+        if source.standardizedFileURL == OnlineLibrary.downloadsFolder.standardizedFileURL { return "arrow.down.circle.fill" }
         return source.path.localizedCaseInsensitiveContains("keyshot") ? "k.circle.fill" : "books.vertical.fill"
     }
 
@@ -105,59 +123,11 @@ struct MaterialLibraryView: View {
         .padding(.bottom, 8)
     }
 
-    private var categoryChips: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            chipRow {
-                chip("All", count: library.materials.count, selected: library.category == nil) {
-                    model.library.category = nil
-                }
-                ForEach(library.categories, id: \.name) { category in
-                    chip(category.name.isEmpty ? "Uncategorized" : category.name, count: category.count,
-                         selected: library.topCategory == category.name) {
-                        model.library.category = category.name
-                    }
-                }
-            }
-            // Second level for nested libraries (KeyShot: Metal › Anodized, Paint › Metallic...).
-            if let top = library.topCategory, !library.subcategories.isEmpty {
-                chipRow {
-                    Image(systemName: "arrow.turn.down.right").font(.caption).foregroundStyle(.tertiary)
-                    chip("All \(top)", count: library.categories.first { $0.name == top }?.count ?? 0,
-                         selected: library.category == top, small: true) {
-                        model.library.category = top
-                    }
-                    ForEach(library.subcategories, id: \.name) { sub in
-                        chip(String(sub.name.split(separator: "/").last ?? ""), count: sub.count,
-                             selected: library.category == sub.name, small: true) {
-                            model.library.category = sub.name
-                        }
-                    }
-                }
-            }
-        }
-        .padding(.bottom, 8)
-    }
-
-    private func chipRow<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6, content: content).padding(.horizontal, 12)
-        }
-    }
-
-    private func chip(_ title: String, count: Int, selected: Bool, small: Bool = false,
-                      action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Text(title)
-                Text("\(count)").foregroundStyle(selected ? .white.opacity(0.75) : .secondary)
-            }
-            .font(.system(size: small ? 10 : 11, weight: .medium))
-            .padding(.horizontal, small ? 7 : 9)
-            .padding(.vertical, small ? 3 : 4)
-            .background(Capsule().fill(selected ? Color.accentColor : Color.secondary.opacity(0.15)))
-            .foregroundStyle(selected ? .white : .primary)
-        }
-        .buttonStyle(.plain)
+    private var filterSection: some View {
+        @Bindable var library = model.library
+        return FilterPanel(groups: library.filterGroups, selection: $library.filters, storageKey: "Materials")
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
     }
 
     // MARK: Grid
@@ -166,11 +136,20 @@ struct MaterialLibraryView: View {
     private var grid: some View {
         let items = library.filtered
         if library.isScanning && library.materials.isEmpty {
-            ProgressView("Scanning library…").frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if items.isEmpty {
+            ProgressView(library.root.map(OnlineLibrary.isOnline) == true ? "Loading materials…" : "Scanning library…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let error = library.loadError, library.materials.isEmpty {
+            VStack(spacing: 8) {
+                Image(systemName: "wifi.exclamationmark").font(.largeTitle).foregroundStyle(.tertiary)
+                Text(error).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                Button("Retry") { model.library.rescan() }
+            }
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if library.materials.isEmpty {
             VStack(spacing: 6) {
                 Image(systemName: "square.dashed").font(.largeTitle).foregroundStyle(.tertiary)
-                Text(library.materials.isEmpty ? "No materials found in this folder" : "No matches")
+                Text("No materials found in this folder")
                     .foregroundStyle(.secondary)
                 if library.materials.isEmpty {
                     Text("Each material should be a folder of maps named like “Name_Diffuse.jpg”, “Name_Roughness.jpg”, “Name_NormalGL.jpg”.")
@@ -181,6 +160,11 @@ struct MaterialLibraryView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
+                filterSection
+                    .padding(.top, 10)
+                if items.isEmpty {
+                    Text("No matches").foregroundStyle(.secondary).padding(.vertical, 30)
+                }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: library.thumbnailSize, maximum: library.thumbnailSize * 1.4), spacing: 10)],
                           spacing: 12) {
                     ForEach(items) { material in
@@ -215,7 +199,7 @@ struct MaterialLibraryView: View {
                 for entry in document.materials { model.apply(material, to: entry) }
             }
         }
-        if !BuiltInMaterials.isBuiltIn(material.location) {
+        if material.onlineAsset == nil {
             Divider()
             Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([material.location]) }
         }
@@ -316,7 +300,22 @@ private struct MaterialTile: View {
                         }
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                if material.isProcedural {
+                if material.onlineAsset != nil {
+                    Image(systemName: "icloud.and.arrow.down")
+                        .font(.system(size: 9, weight: .bold))
+                        .padding(4)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .padding(4)
+                        .help("Downloaded when applied")
+                } else if material.isSubstanceArchive {
+                    Text("S")
+                        .font(.system(size: 9, weight: .heavy, design: .rounded))
+                        .frame(width: 17, height: 17)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .padding(4)
+                        .help(SubstanceRenderer.isAvailable ? "Substance archive: rendered with Substance when applied"
+                                                            : "Substance archive: needs Adobe Substance 3D Designer to render")
+                } else if material.isProcedural {
                     Image(systemName: "function")
                         .font(.system(size: 9, weight: .bold))
                         .padding(4)
@@ -378,7 +377,18 @@ private struct MaterialDetail: View {
                         .help(kind.isUnsupported ? "\(kind.rawValue) maps aren't supported by USDZ and are skipped" : "")
                 }
             }
-            if material.isKeyShotFile {
+            if let asset = material.onlineAsset {
+                Text("Free CC0 material from \(asset.provider.displayName). Applying it downloads its maps at your Max Texture size, then it’s also available offline under Downloaded.")
+                    .foregroundStyle(.secondary)
+            } else if material.isSubstanceArchive {
+                if SubstanceRenderer.isAvailable {
+                    Text("Substance archive. Its maps are rendered with Substance when you apply it (cached after the first time).")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Substance archive. Rendering it needs Adobe Substance 3D Designer installed. Or export its texture maps as PNG from a Substance app and add that folder to the library.")
+                        .foregroundStyle(.orange)
+                }
+            } else if material.isKeyShotFile {
                 keyShotSummary
             } else if material.isProcedural {
                 Text("No texture maps. Color, roughness and metalness come from the KeyShot material, so procedural patterns aren't reproduced.")
@@ -434,35 +444,3 @@ private extension MaterialDetail {
     }
 }
 
-/// Wraps children onto multiple lines.
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 4
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        arrange(proposal.width ?? .infinity, subviews).size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        for (subview, origin) in zip(subviews, arrange(bounds.width, subviews).origins) {
-            subview.place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y), proposal: .unspecified)
-        }
-    }
-
-    private func arrange(_ width: CGFloat, _ subviews: Subviews) -> (origins: [CGPoint], size: CGSize) {
-        var origins: [CGPoint] = []
-        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, maxX: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > width {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            origins.append(CGPoint(x: x, y: y))
-            x += size.width + spacing
-            maxX = max(maxX, x - spacing)
-            rowHeight = max(rowHeight, size.height)
-        }
-        return (origins, CGSize(width: maxX, height: y + rowHeight))
-    }
-}

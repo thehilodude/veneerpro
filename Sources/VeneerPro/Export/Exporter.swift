@@ -5,6 +5,8 @@ struct ExportOptions {
     /// Store the root layer as binary USDC (requires /usr/bin/usdcat), otherwise USDA.
     var binary = true
     var validate = true
+    /// Caps texture size (for quick previews such as Vision Pro); nil keeps full resolution.
+    var maxTextureSize: Int? = nil
 }
 
 enum Exporter {
@@ -14,7 +16,8 @@ enum Exporter {
     static func export(_ document: ModelDocument, to url: URL, options: ExportOptions = ExportOptions()) async throws -> [String] {
         // Snapshot graphs on the main actor; the heavy work happens off it.
         let jobs: [([SCNMaterial], String, GraphEvaluator)] = document.materials.map { entry in
-            (entry.materials, entry.name, GraphEvaluator(graph: entry.graph, size: GraphEvaluator.bakeSize(for: entry.graph)))
+            (entry.materials, entry.name, GraphEvaluator(graph: entry.graph,
+                                                          size: min(GraphEvaluator.bakeSize(for: entry.graph), options.maxTextureSize ?? .max)))
         }
         let root = document.root
         let metadata = document.metadata
@@ -29,6 +32,7 @@ enum Exporter {
                 USDWriter.MaterialJob(materials: sceneMaterials, name: name, result: evaluator.evaluateMaterial(), evaluator: evaluator)
             }
             let writer = USDWriter(rootName: name)
+            writer.maxTextureSize = options.maxTextureSize
             let usda = writer.write(root: root, materials: materials, metadata: metadata)
 
             let fm = FileManager.default

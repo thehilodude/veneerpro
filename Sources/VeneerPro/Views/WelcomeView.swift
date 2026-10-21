@@ -50,7 +50,7 @@ struct WelcomeView: View {
             case .importModel:
                 "Drop files or folders onto the window, or press ⌘O. Parts and materials are read automatically — USDZ, USD, FBX, OBJ and more."
             case .apply:
-                "Pick from Veneer Essentials or your Visune and KeyShot libraries. Drag a material onto a part, or double-click it to apply."
+                "Pick from Poly Haven and ambientCG, or your Visune, KeyShot and Substance libraries. Drag a material onto a part, or double-click it to apply."
             case .refine:
                 "Tune colors and finishes in the node editor, and set Box, Planar or Cylindrical mapping in real-world sizes."
             case .view:
