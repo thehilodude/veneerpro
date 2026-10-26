@@ -41,6 +41,8 @@ final class MaterialGraph: Identifiable {
     var name: String
     var nodes: [GraphNode] = []
     var links: [GraphLink] = []
+    /// Color code and finish (see CMFSpec.swift).
+    var spec = CMFSpec()
     /// Bumped on every edit so observers can re-evaluate.
     private(set) var revision = 0
     @ObservationIgnored var onChange: (() -> Void)?
@@ -72,15 +74,16 @@ final class MaterialGraph: Identifiable {
         var name: String
         var nodes: [GraphNode]
         var links: [GraphLink]
+        var spec = CMFSpec()
 
         static func == (a: Snapshot, b: Snapshot) -> Bool {
-            a.name == b.name && a.links == b.links && a.nodes.count == b.nodes.count
+            a.name == b.name && a.spec == b.spec && a.links == b.links && a.nodes.count == b.nodes.count
                 && zip(a.nodes, b.nodes).allSatisfy { $0.id == $1.id && $0.position == $1.position && $0.values == $1.values
                     && $0.option == $1.option && $0.texture === $1.texture && $0.kind == $1.kind }
         }
     }
 
-    var snapshot: Snapshot { Snapshot(name: name, nodes: nodes, links: links) }
+    var snapshot: Snapshot { Snapshot(name: name, nodes: nodes, links: links, spec: spec) }
 
     /// Replaces the content with a snapshot (re-evaluates, but isn't reported as a new edit).
     func restore(_ snapshot: Snapshot) {
@@ -89,6 +92,7 @@ final class MaterialGraph: Identifiable {
         name = snapshot.name
         nodes = snapshot.nodes
         links = snapshot.links
+        spec = snapshot.spec
         touch()
         onEdit = edit
     }

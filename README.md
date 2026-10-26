@@ -82,12 +82,43 @@ Headless conversion:
   - **Original UVs**: switching back to UV restores them exactly.
   - **Undo**: mapping changes are undoable.
   - **Command line**: `--mapping box --mapping-size 0.05 --mapping-axis Y` (size in meters).
-- **Share to iPhone or iPad** (toolbar QR button or File → Share to iPhone or iPad…, ⇧⌘S): no app, App Store or upload needed.
+- **Share to iPhone or iPad** (toolbar QR button or File → Share to iPhone or iPad…, ⌥⌘S): no app, App Store or upload needed.
   - **How it works:** Veneer Pro serves the selected model from your Mac over your Wi-Fi and shows a QR code. Scan it with the iPhone or iPad Camera, then tap **View in AR** to open the model in AR Quick Look.
-  - **Updates:** the model is re-exported about a second after each edit, and the phone's page shows "Load the latest version" when there's a newer one. (AR Quick Look can't refresh a model that's already open.)
+  - **Updates:** the model is re-exported about a second after each edit, and the **View in AR** button turns yellow and becomes **Load New Version** when there's a newer one. (AR Quick Look can't refresh a model that's already open.)
+  - **On iPad:** the page switches to two columns, with the preview on the left and details on the right: dimensions in cm and inches, part and polygon counts, file size, units, each material with its swatch, and when the model was last updated.
   - **Sending the file:** AirDrop, Messages and Mail buttons send the current USDZ directly.
   - **Privacy:** links carry a random code and stop working when you click Stop Sharing. Nothing leaves your local network, but anyone on the same Wi-Fi with the link can view the model while sharing is on.
   - **Firewall:** if the macOS firewall is on, allow Veneer Pro to accept incoming connections the first time.
+- **Projects (.vnr)**: File → Save Project (⌘S) keeps everything you've done in one file: every open model with its object edits (names, visibility, transforms, deletions, separated materials), material graphs, texture mappings, colorways, and the comparison.
+  - Projects are self-contained: models and textures are copied in, so a project still opens if the original files move. Send one to another Mac like any file.
+  - Open a project with File → Open… (⌘O), by dropping it on the window, or by double-clicking it in Finder. File → New Project (⌘N) clears the workspace.
+  - Veneer Pro asks before closing or opening another project when there are unsaved edits.
+- **Color & Finish** (Materials tab): specify materials the way they're handed to suppliers.
+  - **Color:** pick from **RAL Classic** (215), **RAL Design System+** (1,822) or **RAL Effect** (490, including metallics), searching by code or name and filtering by color family, or enter hex/RGB, **CIELAB** (D65), or any other system's code (Pantone, NCS…) with its screen value. The inspector shows hex, RGB, L\*a\*b\* and the nearest RAL with its CIEDE2000 ΔE.
+  - **Finish:** presets for paint gloss levels (60° gloss units), **SPI** mold polish grades (A-1 to D-3), **VDI 3400** textures (Ref 12–45 with Ra), metals (polished, brushed, bead blasted, anodized) and coatings (soft-touch, powder coat). Textured finishes add a grain node driving roughness.
+  - Codes are saved with the material, in colorways and in projects, and shown on the iPad share page. If you change the color or finish by hand afterward, it's marked as changed.
+  - Screen colors and roughness values are approximations; confirm against physical swatches. RAL data from the MIT-licensed [ral-colors](https://www.npmjs.com/package/ral-colors) package.
+- **Ground plane** (Environment tab → Ground): a floor under the model that catches a soft shadow. **Solid** is a neutral studio floor with adjustable shade; **Shadow Only** shows just the shadow over the environment backdrop. It's view only, hidden in true-scale scenes, and can be turned off.
+- **Spec sheet** (File → Export Spec Sheet…, ⌥⌘P, or the Properties tab): a landscape PDF with a page per colorway (or the current materials): a hero render plus front, side and top views, overall dimensions in cm and inches, and every material's color code, hex and L\*a\*b\*, finish standard, and metallic/roughness values. Materials with identical specs are listed once.
+- **AR Match** (viewer bar): shows the selected model in **RealityKit**, the renderer behind AR Quick Look and Vision Pro, using the exact USDZ that Share to iPhone sends, so what you see matches AR more closely than the editing viewer. It re-exports about a second after each edit and updates in place. Drag to orbit, scroll or pinch to zoom, double-click to reframe. View only: switch it off to select parts or use scale scenes and Compare.
+- **Objects** (sidebar Scene tab and the viewer):
+  - **Selection** follows the viewer: clicking a part selects it in the Scene list, opening its groups and scrolling to it. ⌘- or ⇧-click (in the viewer or the list) selects several objects.
+  - **Group and rearrange:** Object → Group (⌘G) and Ungroup (⇧⌘G); drag rows onto a group to move them in, or onto an object to move them above it; right-click for Move Up/Down, Move Out of Group and Select Parent Group (⌘↑). Objects keep their place in the scene, and every change can be undone.
+  - **Gumball:** drag the arrows to move along X/Y/Z and the rings to rotate (⇧ snaps to 15°), around the selection's pivot. The viewer bar's Gumball menu switches between world and local axes and turns on **Edit Pivot**, where the arrows move the pivot instead. Pivot presets: center, bottom, origin.
+  - **Hinges** (Object inspector): add a hinge around X, Y or Z through the pivot, then swing it with the Angle slider between min and max limits (an orange line shows the axis). Pivots, hinges and angles are saved in projects and exported as the object's position.
+- **Poses** (Object tab, or the viewer bar's Pose menu): save arrangements such as **Closed** and **Open** — every object's position, rotation, visibility and hinge angle — and switch between them. USDZ exports include them as a "Pose" variant set next to "Colorway", which AR Quick Look shows as a second picker. Poses are saved in projects.
+- **Colorways** (Materials tab, or the viewer bar's swatch menu): save the current materials as a named colorway, try another look, and switch between them with one click.
+  - A colorway stores every material's node graph and texture mapping. Applying one is a single undo step.
+  - When you edit after applying a colorway, it's marked **Modified**; choose **Update** to overwrite it or **Save as New** to keep both.
+  - **Compare Colorway** (in the Compare menu, or right-click a colorway) shows a copy wearing that colorway beside the current one.
+  - **Colorway picker in AR:** USDZ exports (and Share to iPhone) include every colorway as a USD variant set named "Colorway", which AR Quick Look shows as a picker, like Apple's own product models. Geometry and textures are stored once; the default is the active colorway (or "Current" if you've edited since). Colorways that differ only in texture mapping use the current mapping.
+  - **File → Export Colorways…** writes one USDZ per colorway into a folder.
+  - Colorways are saved in projects (below).
+- **Compare** (the viewer bar's split button, or right-click a model in the Models list): two models side by side in the same scene, lighting and true-scale setting.
+  - **Compare with a Copy:** duplicates the model, including its materials, graphs and mappings, so you can try material variations and see them next to each other. The copy is a full model you can export or send to Vision Pro.
+  - **Compare With:** puts another open model beside it at true relative scale, even when the files use different units. On the desk, both stand on the desk.
+  - **Editing:** click a part of either model to edit it; the inspector and node editor follow. The Models list marks the pair **A** and **B**.
+  - **Exports:** the side-by-side placement is view-only and never changes either model's export.
 - **True-scale scenes** (viewer bar's scene button, or Environment → Scale Scene): judge a product's size in context. The scenes are view-only and never exported.
   - **Materials:** every scene is built from untextured clay shapes at real-world sizes.
   - **Desk:** 120 × 60 cm, 74 cm high. Toggle **Props**: a 27" monitor, 14" laptop, phone and mug.

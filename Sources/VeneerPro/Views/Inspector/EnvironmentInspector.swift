@@ -28,6 +28,26 @@ struct EnvironmentInspector: View {
                 Toggle("Show Grid", isOn: $model.viewer.showGrid)
             }
 
+            InspectorSection(title: "Ground") {
+                Toggle("Show Ground Plane", isOn: $model.viewer.showGround)
+                if model.viewer.showGround {
+                    Picker("Style", selection: $model.viewer.groundStyle) {
+                        ForEach(GroundStyle.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    if model.viewer.groundStyle == .solid {
+                        LabeledSlider(title: "Shade", value: $model.viewer.groundShade, range: 0.05...0.9, defaultValue: 0.42,
+                                      format: { "\(Int(($0 * 100).rounded()))%" })
+                    }
+                }
+                Text(model.viewer.scaleScene.kind == .none
+                     ? "A floor under the model that catches its shadow. Shadow Only lets the background show through. View only, never exported."
+                     : "Hidden while a scale scene is showing; it has its own floor.")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             InspectorSection(title: "Scale Scene") {
                 HStack(spacing: 5) {
                     ForEach(ScaleScene.Kind.allCases) { kind in

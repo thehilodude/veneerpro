@@ -6,7 +6,25 @@ struct ObjectInspector: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        if let node = model.selectedNode, let document = model.selectedDocument {
+        if let document = model.selectedDocument { PosesSection(document: document) }
+        if model.selectedNodes.count > 1, let document = model.selectedDocument {
+            let _ = document.sceneRevision
+            InspectorSection(title: "\(model.selectedNodes.count) Objects Selected") {
+                ForEach(model.selectedNodes, id: \.self) { node in
+                    Label(AppModel.displayName(node), systemImage: node.geometry != nil ? "cube" : "folder")
+                        .lineLimit(1)
+                }
+                HStack {
+                    Button("Group") { model.groupSelection() }
+                        .help("Put the selected objects in a new group (⌘G)")
+                    Spacer()
+                    Button("Delete", role: .destructive) { model.deleteSelection() }
+                }
+                Text("⌘- or ⇧-click parts in the viewer or rows in the Scene list to add or remove them.")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else if let node = model.selectedNode, let document = model.selectedDocument {
             // Re-read when the hierarchy changes (undo/redo of renames, visibility…).
             let _ = document.sceneRevision
             ObjectDetails(node: node, document: document)
@@ -64,7 +82,22 @@ private struct ObjectDetails: View {
             }
             Text("In the model's own units. Drag a field's label to scrub.")
                 .font(.caption2).foregroundStyle(.tertiary)
+            VectorField(title: node.customPivot == nil ? "Pivot (center)" : "Pivot", value: node.pivotPoint, step: 0.01) {
+                model.setPivot(node, to: $0)
+            }
+            HStack(spacing: 6) {
+                Button("Center") { model.setPivot(node, to: nil) }
+                Button("Bottom") { model.setPivotToBottom(node) }
+                Button("Origin") { model.setPivot(node, to: .zero) }
+                Spacer()
+                Toggle("Edit", isOn: Binding(get: { model.gumball.editPivot }, set: { model.gumball.editPivot = $0 }))
+                    .toggleStyle(.button)
+                    .help("Drag the gumball's arrows to move the pivot instead of the object")
+            }
+            .controlSize(.small)
         }
+
+        HingeSection(node: node)
 
         InspectorSection(title: "Materials") {
             if entries.isEmpty {
@@ -158,6 +191,67 @@ private struct AxisField: View {
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 11).monospacedDigit())
                 .controlSize(.small)
+        }
+    }
+}
+
+/// Turns an object into a hinged part (lid, door) that swings around its pivot.
+private struct HingeSection: View {
+    @Environment(AppModel.self) private var model
+    let node: SCNNode
+
+    var body: some View {
+        InspectorSection(title: "Hinge") {
+            if let hinge = node.hinge {
+                BarSlider(title: "Angle", value: Binding(
+                    get: { hinge.angle },
+                    set: { var h = hinge; h.angle = $0; model.setHinge(node, h) }
+                ), range: hinge.minAngle...max(hinge.maxAngle, hinge.minAngle + 1), defaultValue: 0,
+                          format: { String(format: "%.0f°", $0) })
+                HStack(spacing: 8) {
+                    limitField("Min", hinge.minAngle) { var h = hinge; h.minAngle = min($0, h.maxAngle - 1); model.setHinge(node, h, name: "Change Hinge Limits") }
+                    limitField("Max", hinge.maxAngle) { var h = hinge; h.maxAngle = max($0, h.minAngle + 1); model.setHinge(node, h, name: "Change Hinge Limits") }
+                }
+                HStack(spacing: 6) {
+                    Button("Set Closed Here") {
+                        var h = hinge
+                        h.restTransform = node.simdTransform
+                        h.angle = 0
+                        model.setHinge(node, h, name: "Set Hinge Closed Position")
+                    }
+                    .help("Make the current position 0°")
+                    Spacer()
+                    Button("Remove", role: .destructive) { model.removeHinge(from: node) }
+                }
+                .controlSize(.small)
+                Text("Swings around the pivot (orange line in the viewer). Move the pivot onto the hinge line first.")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Swing this object around its pivot, like a lid or a door.")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text("Add Hinge")
+                    ForEach(0..<3, id: \.self) { axis in
+                        Button(["X", "Y", "Z"][axis]) { model.addHinge(to: node, worldAxis: axis) }
+                            .help("Hinge around the world \(["X", "Y", "Z"][axis]) axis through the pivot")
+                    }
+                }
+                .controlSize(.small)
+                Text("Set the pivot on the hinge line first (Transform ▸ Pivot, or the gumball's Edit Pivot).")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func limitField(_ title: String, _ value: Double, set: @escaping (Double) -> Void) -> some View {
+        HStack(spacing: 4) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            TextField(title, value: Binding(get: { value }, set: set), format: .number.precision(.fractionLength(0)))
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 56)
+            Text("°").font(.caption).foregroundStyle(.secondary)
         }
     }
 }

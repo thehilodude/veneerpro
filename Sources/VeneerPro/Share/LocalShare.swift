@@ -41,6 +41,13 @@ final class LocalShare {
     /// "W 30.8 · D 43.2 · H 62.6 cm" and the material count, shown on the page.
     @ObservationIgnored private var sizeText = ""
     @ObservationIgnored private var materialCount = 0
+    /// Extra facts for the tablet layout's details panel.
+    @ObservationIgnored private var sizeMeters: SIMD3<Float>?
+    @ObservationIgnored private var materialInfo: [(name: String, swatch: Data?, detail: String?)] = []
+    @ObservationIgnored private var partCount = 0
+    @ObservationIgnored private var polygonCount = 0
+    @ObservationIgnored private var fileBytes = 0
+    @ObservationIgnored private var unitsName = ""
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var exportTask: Task<Void, Never>?
     @ObservationIgnored private var pendingExport = false
@@ -150,6 +157,22 @@ final class LocalShare {
             if let image = snapshot?(), let png = Self.png(image, maxSize: 900) { thumbnail = png }
             if iconPNG == nil { iconPNG = Self.png(NSApp.applicationIconImage, maxSize: 128) }
             materialCount = document.materials.count
+            sizeMeters = document.size()
+            materialInfo = document.materials.map { entry in
+                (entry.name, entry.swatch.flatMap { NSBitmapImageRep(cgImage: $0).representation(using: .png, properties: [:]) },
+                 Self.specDetail(entry.graph))
+            }
+            var parts = 0, polygons = 0
+            document.root.enumerateHierarchy { node, _ in
+                guard let geometry = node.geometry else { return }
+                parts += 1
+                polygons += geometry.elements.reduce(0) { $0 + $1.primitiveCount }
+            }
+            partCount = parts
+            polygonCount = polygons
+            fileBytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            let units: [(Double, String)] = [(0.001, "Millimeters"), (0.01, "Centimeters"), (1, "Meters"), (0.0254, "Inches"), (0.3048, "Feet")]
+            unitsName = units.first { abs($0.0 - document.metadata.metersPerUnit) < 1e-9 }?.1 ?? "\(document.metadata.metersPerUnit) m per unit"
             if let size = document.size() {
                 func cm(_ m: Float) -> String { let v = Double(m) * 100; return v >= 100 ? String(format: "%.0f", v) : String(format: "%.1f", v) }
                 sizeText = "W \(cm(size.x)) · D \(cm(size.z)) · H \(cm(size.y)) cm"
@@ -195,6 +218,11 @@ final class LocalShare {
                  extraHeaders: ["Content-Disposition": "inline; filename=\"\(Self.safeName(document?.name ?? "Model")).usdz\""])
         case "icon.png":
             send(connection, status: iconPNG == nil ? "404 Not Found" : "200 OK", type: "image/png", body: iconPNG ?? Data())
+        case let file where file.hasPrefix("swatch/"):
+            // swatch/<index>.png: a material's preview swatch for the tablet layout.
+            let index = Int(file.dropFirst(7).split(separator: ".").first ?? "") ?? -1
+            let data = materialInfo.indices.contains(index) ? materialInfo[index].swatch : nil
+            send(connection, status: data == nil ? "404 Not Found" : "200 OK", type: "image/png", body: data ?? Data())
         case "thumb.png":
             send(connection, status: thumbnail == nil ? "404 Not Found" : "200 OK", type: "image/png", body: thumbnail ?? Data())
         case "version":
@@ -274,12 +302,40 @@ final class LocalShare {
           @keyframes glow { 50% { box-shadow: 0 0 0 5px rgba(255,193,7,.3); } }
           .notice { display: none; margin: 0 2px 10px; font-size: 12.5px; color: var(--secondary); text-align: center; }
           footer { margin-top: 16px; text-align: center; font-size: 11.5px; line-height: 1.5; color: var(--tertiary); }
+          /* Tablet: preview on the left, details on the right. */
+          .details { display: none; }
+          @media (min-width: 720px) {
+            main { max-width: 1120px; padding: max(24px, env(safe-area-inset-top)) 24px max(32px, env(safe-area-inset-bottom)); }
+            .layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, 1fr); gap: 18px; align-items: start; }
+            .layout > div:first-child { position: sticky; top: max(24px, env(safe-area-inset-top)); }
+            h1 { font-size: 28px; }
+            .actions { padding: 14px 12px 12px; }
+            .details { display: flex; flex-direction: column; gap: 14px; }
+            .details .panel { padding: 14px 16px; }
+            .details h2 { margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--tertiary); }
+            .rows { display: grid; grid-template-columns: auto 1fr auto; gap: 8px 14px; font-size: 14px; font-variant-numeric: tabular-nums; }
+            .rows .label { color: var(--secondary); }
+            .rows .value { text-align: right; }
+            .rows .alt { text-align: right; color: var(--tertiary); }
+            .facts { display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; font-size: 14px; font-variant-numeric: tabular-nums; }
+            .facts span:nth-child(odd) { color: var(--secondary); }
+            .facts span:nth-child(even) { text-align: right; }
+            .materials { list-style: none; margin: 0 -6px 0 0; padding: 0 6px 0 0; max-height: 252px; overflow-y: auto; }
+            .materials li { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--hairline); font-size: 14px; }
+            .materials li:first-child { border-top: 0; }
+            .materials img, .materials .blank { width: 26px; height: 26px; border-radius: 50%; flex: none; background: var(--control);
+                                                 box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+            .materials .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .materials .tag { font-size: 11px; color: var(--tertiary); }
+            .updated { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--secondary); }
+          }
         </style></head>
         <body><main>
           <header>
             <img src="icon.png" alt="">
             <div><div class="app">Veneer Pro</div><div class="from">Shared from \(mac)</div></div>
           </header>
+          <div class="layout"><div>
           <section class="panel">
             <div class="title">
               <h1>\(name)</h1>
@@ -298,6 +354,9 @@ final class LocalShare {
             <div class="step"><b style="color: var(--red)">1</b>Tap View in AR</div>
             <div class="step"><b style="color: var(--yellow)">2</b>Place it on a surface</div>
             <div class="step"><b style="color: var(--blue)">3</b>Pinch to scale, drag to move</div>
+          </div>
+          </div>
+          \(detailsPanel())
           </div>
           <footer>Opens in AR Quick Look at true size.<br>Keep this page open — the button changes when there’s a newer version from the Mac.</footer>
         </main>
@@ -323,6 +382,7 @@ final class LocalShare {
                 document.getElementById('notice').style.display = 'block';
               }
               document.getElementById('dot').className = j.exporting ? 'dot busy' : 'dot';
+              document.getElementById('dot2').className = j.exporting || newer ? 'dot busy' : 'dot';
               document.getElementById('state').textContent = j.exporting ? 'Updating…' : (newer ? 'Update ready' : 'Up to date');
             } catch (e) {
               document.getElementById('state').textContent = 'Mac not reachable';
@@ -332,6 +392,44 @@ final class LocalShare {
         </script>
         </body></html>
         """
+    }
+
+    /// The tablet layout's right column: dimensions, model facts, materials and update time.
+    private func detailsPanel() -> String {
+        func cm(_ m: Float) -> String { let v = Double(m) * 100; return v >= 100 ? String(format: "%.0f cm", v) : String(format: "%.1f cm", v) }
+        func inch(_ m: Float) -> String { String(format: "%.1f in", Double(m) / 0.0254) }
+        var html = "<aside class=\"details\">"
+        if let size = sizeMeters {
+            html += "<section class=\"panel\"><h2>Dimensions</h2><div class=\"rows\">"
+            for (label, value) in [("Width", size.x), ("Depth", size.z), ("Height", size.y)] {
+                html += "<span class=\"label\">\(label)</span><span class=\"value\">\(cm(value))</span><span class=\"alt\">\(inch(value))</span>"
+            }
+            html += "</div></section>"
+        }
+        let megabytes = String(format: "%.1f MB", Double(fileBytes) / 1_000_000)
+        html += "<section class=\"panel\"><h2>Model</h2><div class=\"facts\">"
+        html += "<span>Parts</span><span>\(partCount.formatted())</span>"
+        html += "<span>Polygons</span><span>\(polygonCount.formatted())</span>"
+        html += "<span>File size</span><span>\(megabytes)</span>"
+        html += "<span>Units</span><span>\(Self.html(unitsName))</span>"
+        html += "</div></section>"
+        html += "<section class=\"panel\"><h2>Materials (\(materialInfo.count))</h2><ul class=\"materials\">"
+        for (i, material) in materialInfo.enumerated() {
+            let swatch = material.swatch == nil ? "<span class=\"blank\"></span>" : "<img src=\"swatch/\(i).png?v=\(version)\" alt=\"\">"
+            html += "<li>\(swatch)<span class=\"name\">\(Self.html(material.name))</span>\(material.detail.map { "<span class=\"tag\">\(Self.html($0))</span>" } ?? "")</li>"
+        }
+        html += "</ul></section>"
+        let time = lastUpdated.map { $0.formatted(date: .omitted, time: .shortened) } ?? "—"
+        html += "<section class=\"panel\"><h2>Status</h2><div class=\"updated\"><span class=\"dot\" id=\"dot2\"></span>Updated \(time) from \(Self.html(Self.computerName))</div></section>"
+        return html + "</aside>"
+    }
+
+    /// "RAL 5015 · Satin", or "Textured" for image-based materials with no spec.
+    private static func specDetail(_ graph: MaterialGraph) -> String? {
+        let parts = [graph.colorMatchesSpec ? graph.spec.colorCode : nil,
+                     graph.finishMatchesSpec ? graph.spec.finish?.name : nil].compactMap { $0 }
+        if !parts.isEmpty { return parts.joined(separator: " · ") }
+        return graph.nodes.contains { $0.kind == .imageTexture } ? "Textured" : nil
     }
 
     // MARK: Helpers

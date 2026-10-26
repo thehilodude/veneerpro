@@ -54,6 +54,7 @@ struct MaterialsInspector: View {
     var body: some View {
         @Bindable var model = model
         if let document = model.selectedDocument {
+            ColorwaysSection(document: document)
             InspectorSection(title: "Materials") {
                 if document.materials.isEmpty {
                     Text("No materials").foregroundStyle(.secondary)
@@ -64,6 +65,7 @@ struct MaterialsInspector: View {
                 }
             }
             if let entry = model.selectedMaterial {
+                CMFSection(entry: entry)
                 InspectorSection(title: "Selected Material") {
                     @Bindable var entry = entry
                     TextField("Name", text: $entry.name)
@@ -89,8 +91,12 @@ struct MaterialsInspector: View {
                     }
                     Text("Textures are baked at this size when a channel's graph modifies an image. Unmodified textures are exported as-is.")
                         .font(.caption).foregroundStyle(.secondary)
-                    Button("Reset Material", role: .destructive) { entry.reset() }
-                        .controlSize(.small)
+                    HStack {
+                        Button(model.showNodeEditor ? "Hide Nodes" : "Edit Nodes") { model.showNodeEditor.toggle() }
+                        Spacer()
+                        Button("Reset Material", role: .destructive) { entry.reset() }
+                    }
+                    .controlSize(.small)
                 }
                 MappingSection(entry: entry)
             }
@@ -273,8 +279,12 @@ struct PropertiesInspector: View {
                     .disabled(!USDTools.canConvertToBinary)
                 Toggle("Validate (usdchecker / FBX read-back)", isOn: $model.exportOptions.validate)
                     .disabled(!USDTools.canValidate)
-                Button("Export…") { model.presentExportPanel() }
-                    .keyboardShortcut("e")
+                HStack {
+                    Button("Export…") { model.presentExportPanel() }
+                        .keyboardShortcut("e")
+                    Button("Spec Sheet…") { model.presentSpecSheetPanel() }
+                        .help("A PDF with renders, dimensions, and each material's color code and finish")
+                }
                 if let url = document.exportedURL {
                     HStack {
                         Label(url.lastPathComponent, systemImage: "checkmark.circle.fill")

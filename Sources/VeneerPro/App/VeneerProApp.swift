@@ -7,6 +7,9 @@ struct VeneerProApp: App {
     @State private var model: AppModel = {
         // Must run before AppModel reads its settings.
         VeneerProApp.migrateSettings()
+        // Toolbar buttons show their names by default (NSToolbarDisplayMode.iconAndLabel). The toolbar
+        // autosaves its own configuration, so a choice from its right-click menu replaces this.
+        UserDefaults.standard.register(defaults: ["NSToolbar Configuration main": ["TB Display Mode": 1]])
         return AppModel()
     }()
 
@@ -33,10 +36,39 @@ struct VeneerProApp: App {
             CommandGroup(after: .sidebar) {
                 Button(model.showInspector ? "Hide Inspector" : "Show Inspector") { model.showInspector.toggle() }
                     .keyboardShortcut("i", modifiers: [.command, .option])
+                Button(model.showNodeEditor ? "Hide Node Editor" : "Show Node Editor") { model.showNodeEditor.toggle() }
+                    .keyboardShortcut("n", modifiers: [.command, .option])
             }
             CommandGroup(replacing: .newItem) {
-                Button("Import…") { model.presentImportPanel() }
+                Button("New Project") { model.newProject() }
+                    .keyboardShortcut("n")
+                Button("Open…") { model.presentImportPanel() }
                     .keyboardShortcut("o")
+            }
+            CommandMenu("Object") {
+                Button("Group") { model.groupSelection() }
+                    .keyboardShortcut("g")
+                    .disabled(model.selectedNodes.isEmpty)
+                Button("Ungroup") { if let node = model.selectedNode { model.ungroup(node) } }
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
+                    .disabled(model.selectedNode.map { $0.geometry != nil || $0.childNodes.isEmpty } ?? true)
+                Divider()
+                Button("Select Parent Group") {
+                    if let parent = model.selectedNode?.parent, parent !== model.selectedDocument?.root { model.select(parent, showInspector: true) }
+                }
+                .keyboardShortcut(.upArrow, modifiers: .command)
+                .disabled(model.selectedNode?.parent == nil || model.selectedNode?.parent === model.selectedDocument?.root)
+                Button("Deselect All") { model.selectedNodes = [] }
+                    .keyboardShortcut("a", modifiers: [.command, .shift])
+                    .disabled(model.selectedNodes.isEmpty)
+            }
+            CommandGroup(replacing: .saveItem) {
+                Button("Save Project") { model.saveProject() }
+                    .keyboardShortcut("s")
+                    .disabled(model.documents.isEmpty)
+                Button("Save Project As…") { model.saveProjectAs() }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+                    .disabled(model.documents.isEmpty)
             }
             CommandGroup(after: .newItem) {
                 Divider()
@@ -44,8 +76,13 @@ struct VeneerProApp: App {
                     .keyboardShortcut("e")
                     .disabled(model.selectedDocument == nil)
                 Button("Share to iPhone or iPad…") { model.showShareSheet = true }
-                    .keyboardShortcut("s", modifiers: [.command, .shift])
+                    .keyboardShortcut("s", modifiers: [.command, .option])
                     .disabled(model.selectedDocument == nil && !model.share.isActive)
+                Button("Export Spec Sheet…") { model.presentSpecSheetPanel() }
+                    .keyboardShortcut("p", modifiers: [.command, .option])
+                    .disabled(model.selectedDocument == nil)
+                Button("Export Colorways…") { model.presentExportColorwaysPanel() }
+                    .disabled(model.selectedDocument?.colorways.isEmpty != false)
                 Button("Export All…") { model.presentExportAllPanel() }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
                     .disabled(model.documents.isEmpty)
@@ -104,15 +141,17 @@ private struct WelcomeCommands: Commands {
 extension VeneerProApp {
     /// Carries settings (library folders, HDRIs, viewer setup) over from the app's previous name,
     /// Reality Converter 2, once. Existing Veneer Pro settings are never overwritten.
+    /// Copies settings from the app's earlier bundle IDs (Reality Converter 2, then local.veneerpro)
+    /// the first time this ID runs. Keys already set here win.
     static func migrateSettings() {
         let defaults = UserDefaults.standard
-        let flag = "MigratedFromRealityConverter2"
-        guard !defaults.bool(forKey: flag) else { return }
-        for (key, value) in defaults.persistentDomain(forName: "local.realityconverter2") ?? [:]
-        where defaults.object(forKey: key) == nil {
-            defaults.set(value, forKey: key)
+        for (domain, flag) in [("local.veneerpro", "MigratedFromLocalVeneerPro"), ("local.realityconverter2", "MigratedFromRealityConverter2")] {
+            guard !defaults.bool(forKey: flag) else { continue }
+            for (key, value) in defaults.persistentDomain(forName: domain) ?? [:] where defaults.object(forKey: key) == nil {
+                defaults.set(value, forKey: key)
+            }
+            defaults.set(true, forKey: flag)
         }
-        defaults.set(true, forKey: flag)
     }
 
     /// While typing in a text field, ⌘Z undoes the typing; otherwise it undoes the last edit.
@@ -228,6 +267,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    @MainActor
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let model else { return .terminateNow }
+        return model.confirmDiscardingChanges("quitting") ? .terminateNow : .terminateCancel
+    }
 
     @MainActor
     func application(_ application: NSApplication, open urls: [URL]) {

@@ -5,6 +5,7 @@ import SwiftUI
 /// The viewer bar's scene menu: setting, toggles and placement.
 struct ScaleSceneMenu: View {
     @Binding var scene: ScaleScene
+    @State private var hovering = false
 
     var body: some View {
         Menu {
@@ -16,16 +17,15 @@ struct ScaleSceneMenu: View {
                 ScaleSceneToggles(scene: $scene)
             }
         } label: {
-            Image(systemName: scene.kind == .none ? "square.split.bottomrightquarter" : scene.kind.symbol)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 30, height: 26)
-                .foregroundStyle(scene.kind == .none ? Color.primary : Color.accentColor)
-                .contentShape(Capsule())
+            HUDLabel(symbol: scene.kind == .none ? "square.split.bottomrightquarter" : scene.kind.symbol,
+                     title: scene.kind == .none ? "True Scale" : scene.kind.rawValue,
+                     isOn: scene.kind != .none, hovering: hovering, isMenu: true)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
+        .onHover { hovering = $0 }
         .help("True-scale scene: place the model on a desk or in a bedroom")
     }
 }

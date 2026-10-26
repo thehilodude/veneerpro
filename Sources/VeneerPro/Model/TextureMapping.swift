@@ -118,6 +118,14 @@ final class MappingBaker {
     /// The unmapped geometry behind `geometry`.
     func source(of geometry: SCNGeometry) -> SCNGeometry { sources[ObjectIdentifier(geometry)] ?? geometry }
 
+    /// For a duplicated model: gives `copy` its own copy of `original`'s unmapped source in `other`.
+    func adopt(from other: MappingBaker, original: SCNGeometry, copy: SCNGeometry) {
+        let source = other.source(of: original)
+        guard source !== original, let own = source.copy() as? SCNGeometry else { return }
+        own.materials = copy.materials
+        sources[ObjectIdentifier(copy)] = own
+    }
+
     /// Carries the unmapped source over to a copy of a mapped geometry (e.g. when an object gets its own materials).
     func inherit(from geometry: SCNGeometry, to copy: SCNGeometry) {
         if let source = sources[ObjectIdentifier(geometry)] { sources[ObjectIdentifier(copy)] = source }

@@ -11,7 +11,7 @@
     <key>CFBundleDisplayName</key>
     <string>Veneer Pro</string>
     <key>CFBundleIdentifier</key>
-    <string>local.veneerpro</string>
+    <string>com.thehilodude.veneerpro</string>
     <key>CFBundleExecutable</key>
     <string>VeneerPro</string>
     <key>CFBundlePackageType</key>
@@ -28,8 +28,55 @@
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.thehilodude.veneerpro.objects</string>
+            <key>UTTypeDescription</key>
+            <string>Veneer Pro Objects</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.thehilodude.veneerpro.project</string>
+            <key>UTTypeDescription</key>
+            <string>Veneer Pro Project</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>com.apple.package</string>
+                <string>public.composite-content</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>vnr</string>
+                </array>
+            </dict>
+        </dict>
+    </array>
     <key>CFBundleDocumentTypes</key>
     <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Veneer Pro Project</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSTypeIsPackage</key>
+            <true/>
+            <key>CFBundleTypeIconSystemGenerated</key>
+            <true/>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.thehilodude.veneerpro.project</string>
+            </array>
+        </dict>
         <dict>
             <key>CFBundleTypeName</key>
             <string>3D Model</string>

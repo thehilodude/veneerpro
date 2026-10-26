@@ -34,6 +34,17 @@ final class USDWriter {
     var bakeCache: BakeCache?
     /// When set, source textures larger than this are downscaled (for previews; exports keep full size).
     var maxTextureSize: Int?
+    /// Colorways written as a "Colorway" variant set on the default prim, which AR Quick Look shows as a
+    /// picker. Each variant's jobs line up with `materials` (same order); the first variant is the default.
+    var colorwayVariants: [(name: String, materials: [MaterialJob])] = []
+    /// Poses written as a "Pose" variant set: per variant, the transform and visibility of every object
+    /// in `poseControlled`. The first variant is the default.
+    var poseVariants: [(name: String, states: [ObjectIdentifier: (transform: simd_float4x4, hidden: Bool)])] = []
+    /// Objects some pose moves or hides. USD ranks a prim's own opinions above its variants', so these
+    /// get their transform and visibility only from the variants, never in the base scene.
+    var poseControlled: Set<ObjectIdentifier> = []
+    /// Each written node's prim name, for the pose overrides.
+    private var primNames: [ObjectIdentifier: String] = [:]
 
     final class BakeCache: @unchecked Sendable {
         fileprivate var entries: [String: USDZPackager.Entry] = [:]
@@ -62,12 +73,25 @@ final class USDWriter {
         }
         line(")")
         line("")
+        var variantNames: Set<String> = []
+        let variants = colorwayVariants.map { (Self.unique(Self.identifier($0.name, fallback: "Colorway"), in: &variantNames), $0.materials) }
+        var poseNames: Set<String> = []
+        let poses = poseVariants.map { (Self.unique(Self.identifier($0.name, fallback: "Pose"), in: &poseNames), $0.states) }
         line("def Xform \(Self.quoted(rootName)) (")
         indented {
             line("assetInfo = {")
             indented { line("string name = \(Self.quoted(rootName))") }
             line("}")
             line("kind = \"component\"")
+            var sets: [(String, String)] = []
+            if let first = variants.first { sets.append(("Colorway", first.0)) }
+            if let first = poses.first, part != .materials { sets.append(("Pose", first.0)) }
+            if !sets.isEmpty {
+                line("variants = {")
+                indented { for (set, choice) in sets { line("string \(set) = \(Self.quoted(choice))") } }
+                line("}")
+                line("prepend variantSets = [\(sets.map { Self.quoted($0.0) }.joined(separator: ", "))]")
+            }
         }
         line(")")
         // Material prim paths are needed for bindings even when only geometry is written.
@@ -79,16 +103,49 @@ final class USDWriter {
             return (job, name, path)
         }
         block {
-            if !named.isEmpty && part != .geometry {
+            if !named.isEmpty && part != .geometry && variants.isEmpty {
                 line("def Scope \"Materials\"")
                 block {
                     for (job, name, path) in named { writeMaterial(job, name: name, path: path) }
                 }
             }
+            if !variants.isEmpty {
+                // The materials live in the variants: every variant defines the same material paths,
+                // so the meshes' bindings pick up whichever colorway is selected.
+                line("def Scope \"Materials\"")
+                block {}
+                line("variantSet \"Colorway\" = {")
+                indented {
+                    for (variant, jobs) in variants {
+                        line(Self.quoted(variant) + " {")
+                        indented {
+                            line("over \"Materials\"")
+                            block {
+                                for (i, (_, name, path)) in named.enumerated() where i < jobs.count {
+                                    writeMaterial(jobs[i], name: name, path: path)
+                                }
+                            }
+                        }
+                        line("}")
+                    }
+                }
+                line("}")
+            }
             if part != .materials {
                 var siblingNames: Set<String> = ["Materials"]
                 for child in root.childNodes {
                     writeNode(child, siblingNames: &siblingNames)
+                }
+                if !poses.isEmpty {
+                    line("variantSet \"Pose\" = {")
+                    indented {
+                        for (pose, states) in poses {
+                            line(Self.quoted(pose) + " {")
+                            indented { for child in root.childNodes { writeOverrides(child, states: states) } }
+                            line("}")
+                        }
+                    }
+                    line("}")
                 }
             }
         }
@@ -263,19 +320,39 @@ final class USDWriter {
 
     // MARK: - Geometry
 
+    /// Writes `over`s giving each pose-controlled object under `node` its state in this variant.
+    private func writeOverrides(_ node: SCNNode, states: [ObjectIdentifier: (transform: simd_float4x4, hidden: Bool)]) {
+        func changed(_ n: SCNNode) -> Bool { poseControlled.contains(ObjectIdentifier(n)) }
+        func anyChanged(_ n: SCNNode) -> Bool { changed(n) || n.childNodes.contains(where: anyChanged) }
+        guard let name = primNames[ObjectIdentifier(node)], anyChanged(node) else { return }
+        line("over \(Self.quoted(name))")
+        block {
+            if changed(node) {
+                let state = states[ObjectIdentifier(node)] ?? (node.simdTransform, node.isHidden)
+                writeTransform(SCNMatrix4(state.transform), always: true)
+                line("token visibility = \(state.hidden ? "\"invisible\"" : "\"inherited\"")")
+            }
+            for child in node.childNodes { writeOverrides(child, states: states) }
+        }
+    }
+
+    private func writeTransform(_ m: SCNMatrix4, always: Bool = false) {
+        guard always || !SCNMatrix4IsIdentity(m) else { return }
+        let rows = [[m.m11, m.m12, m.m13, m.m14], [m.m21, m.m22, m.m23, m.m24],
+                    [m.m31, m.m32, m.m33, m.m34], [m.m41, m.m42, m.m43, m.m44]]
+        let matrix = rows.map { "(" + $0.map { Self.number(Double($0)) }.joined(separator: ", ") + ")" }.joined(separator: ", ")
+        line("matrix4d xformOp:transform = (\(matrix))")
+        line("uniform token[] xformOpOrder = [\"xformOp:transform\"]")
+    }
+
     private func writeNode(_ node: SCNNode, siblingNames: inout Set<String>) {
         let name = Self.unique(Self.identifier(node.name ?? "", fallback: node.geometry != nil ? "Mesh" : "Node"), in: &siblingNames)
+        primNames[ObjectIdentifier(node)] = name
         line("def Xform \(Self.quoted(name))")
+        let controlled = poseControlled.contains(ObjectIdentifier(node))
         block {
-            let m = node.transform
-            if !SCNMatrix4IsIdentity(m) {
-                let rows = [[m.m11, m.m12, m.m13, m.m14], [m.m21, m.m22, m.m23, m.m24],
-                            [m.m31, m.m32, m.m33, m.m34], [m.m41, m.m42, m.m43, m.m44]]
-                let matrix = rows.map { "(" + $0.map { Self.number(Double($0)) }.joined(separator: ", ") + ")" }.joined(separator: ", ")
-                line("matrix4d xformOp:transform = (\(matrix))")
-                line("uniform token[] xformOpOrder = [\"xformOp:transform\"]")
-            }
-            if node.isHidden { line("token visibility = \"invisible\"") }
+            if !controlled { writeTransform(node.transform) }
+            if node.isHidden, !controlled { line("token visibility = \"invisible\"") }
             var childNames: Set<String> = []
             if let geometry = node.geometry {
                 writeMesh(geometry, name: Self.unique("Geometry", in: &childNames))
@@ -425,7 +502,13 @@ struct MeshData {
     /// One face: per corner, an index for each index channel.
     private typealias Face = [[Int32]]
 
+    /// SceneKit geometry isn't safe to read from several threads at once, and exports (AR Match, Share
+    /// to iPhone, Vision Pro, Export) can run at the same time, so reads take turns.
+    private static let readLock = NSLock()
+
     init?(_ geometry: SCNGeometry) {
+        Self.readLock.lock()
+        defer { Self.readLock.unlock() }
         guard let vertexSource = geometry.sources(for: .vertex).first else { return nil }
         points = Self.read(vertexSource).map { SIMD3($0[0], $0[safe: 1], $0[safe: 2]) }
 

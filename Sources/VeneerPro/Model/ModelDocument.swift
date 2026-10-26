@@ -31,12 +31,26 @@ final class MaterialEntry: Identifiable {
         didSet {
             guard mapping != oldValue else { return }
             onMappingChange?()
-            mappingEdited(from: oldValue)
+            if !quietMapping { mappingEdited(from: oldValue) }
         }
     }
     /// Set by the document to rebuild texture coordinates when the mapping changes.
     @ObservationIgnored var onMappingChange: (() -> Void)?
     @ObservationIgnored private var mappingBaseline: TextureMapping?
+    @ObservationIgnored private var quietMapping = false
+
+    /// Takes over another entry's graph and mapping without recording undo steps (used when duplicating a model).
+    func copyState(from other: MaterialEntry) {
+        applyLook(Colorway.Look(graph: other.graph.snapshot, mapping: other.mapping))
+    }
+
+    /// Puts a saved graph and mapping on this material without recording undo steps (colorways).
+    func applyLook(_ look: Colorway.Look) {
+        if graph.snapshot != look.graph { restoreSnapshot(look.graph) }
+        quietMapping = true
+        mapping = look.mapping
+        quietMapping = false
+    }
 
     init(materials: [SCNMaterial], fallbackName: String) {
         let material = materials[0]
@@ -89,8 +103,24 @@ final class MaterialEntry: Identifiable {
         }
     }
 
+    /// The as-imported graph, for materials restored from a project (whose scene no longer holds the
+    /// imported material).
+    var resetGraph: MaterialGraph.Snapshot?
+
+    /// What Reset Material goes back to.
+    var originalSnapshot: MaterialGraph.Snapshot {
+        resetGraph ?? MaterialGraph(material: original, fallbackName: fallbackName).snapshot
+    }
+
     func reset() {
-        replace(with: MaterialGraph(material: original, fallbackName: fallbackName), stepName: "Reset “\(graph.name)”")
+        let fresh: MaterialGraph
+        if let resetGraph {
+            fresh = MaterialGraph(name: resetGraph.name)
+            fresh.restore(resetGraph)
+        } else {
+            fresh = MaterialGraph(material: original, fallbackName: fallbackName)
+        }
+        replace(with: fresh, stepName: "Reset “\(graph.name)”")
     }
 
     /// Swaps in a new graph (e.g. one built from a library material), keeping the bake size.
@@ -159,6 +189,9 @@ final class MaterialEntry: Identifiable {
         scheduleRefresh(debounce: false)
     }
 
+    /// Waits for the latest refresh to reach the viewport material and swatch.
+    func waitForRefresh() async { await refreshTask?.value }
+
     /// Re-evaluates the graph off the main thread and updates the viewport material and node previews.
     func scheduleRefresh(debounce: Bool = true) {
         NotificationCenter.default.post(name: .materialsDidChange, object: nil)
@@ -210,6 +243,12 @@ final class ModelDocument: Identifiable {
     @ObservationIgnored private var pendingMappings: [MaterialEntry]? = []
     var exportedURL: URL?
     var issues: [String] = []
+    /// Saved material variants (see Colorways.swift), and the one last applied or saved.
+    var colorways: [Colorway] = []
+    var activeColorwayID: UUID?
+    /// Saved object arrangements (see Poses.swift), and the one last applied or saved.
+    var poses: [Pose] = []
+    var activePoseID: UUID?
 
     var meshCount: Int {
         var count = 0
@@ -217,7 +256,57 @@ final class ModelDocument: Identifiable {
         return count
     }
 
-    private init(url: URL, root: SCNNode, metadata: StageMetadata) {
+    /// An independent copy of this model, with its own geometry and materials (graphs and mappings
+    /// included), for comparing material variations side by side.
+    @MainActor
+    func duplicate(named newName: String) -> ModelDocument {
+        let rootCopy = root.clone()
+        rootCopy.simdPosition = .zero
+        rootCopy.simdScale = SIMD3(repeating: 1)
+        var copies: [ObjectIdentifier: SCNMaterial] = [:]
+        var originals: [ObjectIdentifier: SCNMaterial] = [:]   // copy → original
+        var geometries: [(SCNGeometry, SCNGeometry)] = []
+        // clone() shares geometry and materials; walk both trees in step and give the copy its own.
+        var nodeMap: [ObjectIdentifier: SCNNode] = [:]   // original node → its copy
+        func walk(_ a: SCNNode, _ b: SCNNode) {
+            nodeMap[ObjectIdentifier(a)] = b
+            b.customPivot = a.customPivot
+            b.hinge = a.hinge
+            if let geometry = a.geometry, let copy = geometry.copy() as? SCNGeometry {
+                copy.materials = geometry.materials.map { material in
+                    if let existing = copies[ObjectIdentifier(material)] { return existing }
+                    let c = material.copy() as! SCNMaterial
+                    copies[ObjectIdentifier(material)] = c
+                    originals[ObjectIdentifier(c)] = material
+                    return c
+                }
+                b.geometry = copy
+                geometries.append((geometry, copy))
+            }
+            for (childA, childB) in zip(a.childNodes, b.childNodes) { walk(childA, childB) }
+        }
+        walk(root, rootCopy)
+
+        let document = ModelDocument(url: sourceURL, root: rootCopy, metadata: metadata)
+        document.name = newName
+        for (original, copy) in geometries { document.mappingBaker.adopt(from: mappingBaker, original: original, copy: copy) }
+        var ids: [UUID: UUID] = [:]   // this model's material IDs → the copy's
+        for entry in document.materials {
+            guard let original = originals[ObjectIdentifier(entry.material)],
+                  let source = materials.first(where: { $0.materials.contains { $0 === original } }) else { continue }
+            entry.copyState(from: source)
+            entry.resetGraph = source.resetGraph
+            ids[source.id] = entry.id
+        }
+        document.colorways = colorways(remapping: ids)
+        document.poses = poses(remapping: nodeMap)
+        document.activePoseID = activePoseID
+        document.activeColorwayID = activeColorwayID
+        return document
+    }
+
+    /// `groups` lists the SceneKit materials of each material entry; by default identical copies are grouped.
+    init(url: URL, root: SCNNode, metadata: StageMetadata, groups explicit: [[SCNMaterial]]? = nil) {
         sourceURL = url
         name = url.deletingPathExtension().lastPathComponent
         self.root = root
@@ -228,6 +317,7 @@ final class ModelDocument: Identifiable {
         var animated = false
         root.enumerateHierarchy { node, _ in
             if !node.animationKeys.isEmpty || node.skinner != nil || node.morpher != nil { animated = true }
+            guard explicit == nil else { return }
             for material in node.geometry?.materials ?? [] where seen.insert(ObjectIdentifier(material)).inserted {
                 let key = Self.fingerprint(material)
                 if let i = groups.firstIndex(where: { $0.key == key }) {
@@ -237,8 +327,8 @@ final class ModelDocument: Identifiable {
                 }
             }
         }
-        materials = groups.enumerated().map { i, group in
-            MaterialEntry(materials: group.materials, fallbackName: "Material\(i + 1)")
+        materials = (explicit ?? groups.map(\.materials)).enumerated().map { i, group in
+            MaterialEntry(materials: group, fallbackName: "Material\(i + 1)")
         }
         hasAnimations = animated
         applyUpAxis()
@@ -300,7 +390,8 @@ final class ModelDocument: Identifiable {
             }
         }
         guard lo.x <= hi.x else { return nil }
-        return (hi - lo) * Float(metadata.metersPerUnit)
+        // Undo the container's scale (a compared model is scaled into the other model's units).
+        return (hi - lo) * Float(metadata.metersPerUnit) / max(root.simdScale.x, 1e-9)
     }
 
     /// The material entries used by a node's own geometry.

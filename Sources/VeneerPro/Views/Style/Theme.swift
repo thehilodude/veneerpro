@@ -211,13 +211,21 @@ struct InspectorRow<Control: View>: View {
     }
 }
 
-/// A floating translucent capsule of icon buttons over the canvas.
+/// A floating translucent capsule of labeled buttons over the canvas.
 struct CanvasHUD<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
+        // Icons only when the viewport is too narrow for the labels.
+        ViewThatFits(in: .horizontal) {
+            bar
+            bar.environment(\.hudIconsOnly, true)
+        }
+    }
+
+    private var bar: some View {
         HStack(spacing: 2) { content }
-            .padding(4)
+            .padding(5)
             .background(.ultraThinMaterial, in: Capsule())
             .overlay(Capsule().strokeBorder(Color.white.opacity(0.1)))
             .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
@@ -226,6 +234,7 @@ struct CanvasHUD<Content: View>: View {
 
 struct HUDButton: View {
     let symbol: String
+    let title: String
     let help: String
     var isOn = false
     var action: () -> Void
@@ -233,15 +242,48 @@ struct HUDButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 30, height: 26)
-                .foregroundStyle(isOn ? Color.accentColor : .primary)
-                .background(Capsule().fill(hovering ? Color.white.opacity(0.12) : .clear))
-                .contentShape(Capsule())
+            HUDLabel(symbol: symbol, title: title, isOn: isOn, hovering: hovering)
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .help(help)
     }
+}
+
+/// An icon and its name, as shown in the viewer bar; menus add a small chevron.
+struct HUDLabel: View {
+    let symbol: String
+    let title: String
+    var isOn = false
+    var hovering = false
+    var isMenu = false
+    @Environment(\.hudIconsOnly) private var iconsOnly
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol)
+                .font(.system(size: 13.5, weight: .medium))
+                .frame(width: 18)
+            if !iconsOnly {
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+            }
+            if isMenu, !iconsOnly {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .opacity(0.6)
+            }
+        }
+        .padding(.horizontal, iconsOnly ? 6 : 10)
+        .frame(height: 30)
+        .foregroundStyle(isOn ? Color.white : .primary)
+        .background(Capsule().fill(isOn ? Color.accentColor.opacity(hovering ? 0.85 : 1) : hovering ? Color.white.opacity(0.12) : .clear))
+        .contentShape(Capsule())
+    }
+}
+
+extension EnvironmentValues {
+    /// The viewer bar drops its labels when the viewport is narrow.
+    @Entry var hudIconsOnly = false
 }
