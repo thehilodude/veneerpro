@@ -91,6 +91,8 @@ if [[ "$MODE" == "--appstore" ]]; then
     PROFILE_FILE="${PROVISIONING_PROFILE:-Resources/AppStore/embedded.provisionprofile}"
     [[ -f "$PROFILE_FILE" ]] || { echo "Missing provisioning profile: $PROFILE_FILE"; exit 1; }
     cp "$PROFILE_FILE" "$SIGNED/Contents/embedded.provisionprofile"
+    # A downloaded profile carries com.apple.quarantine, which App Store Connect rejects (error 91109).
+    xattr -cr "$SIGNED"
     # The app and team identifiers must match the provisioning profile.
     TEAM=$(security cms -D -i "$PROFILE_FILE" | plutil -extract TeamIdentifier.0 raw -)
     BUNDLE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$SIGNED/Contents/Info.plist")
