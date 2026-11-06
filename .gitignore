@@ -5,3 +5,10 @@ dist/
 .swiftpm/
 *.xcuserstate
 xcuserdata/
+
+# App Store provisioning profiles stay local
+Resources/AppStore/*.provisionprofile
+
+# Generated icon models (rebuild with Design/IconModel/*.py)
+Design/IconModel/*.obj
+Design/IconModel/*.mtl

@@ -155,9 +155,10 @@ enum ColorStandards {
     }
 
     /// The closest RAL Classic color and its CIEDE2000 difference.
-    static func nearestRAL(to rgb: SIMD3<Float>) -> (color: StandardColor, deltaE: Double) {
+    /// Nil when there are no RAL colors (the App Store edition leaves the tables out).
+    static func nearestRAL(to rgb: SIMD3<Float>) -> (color: StandardColor, deltaE: Double)? {
         let target = lab(rgb)
         let ranked = ralClassic.map { ($0, deltaE(target, lab($0.rgb))) }
-        return ranked.min { $0.1 < $1.1 }!
+        return ranked.min { $0.1 < $1.1 }
     }
 }

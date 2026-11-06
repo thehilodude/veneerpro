@@ -2,6 +2,8 @@
 // Data from the "ral-colors" package (MIT License, Copyright (c) 2022 Ibon Eskudero).
 // RAL is a trademark of RAL gGmbH; screen values are approximate, so check physical swatches.
 
+// The App Store edition leaves the RAL tables out (RAL licenses its colour data for commercial use).
+#if !APPSTORE
 extension ColorStandards {
     static let ralDesignTable = """
 RAL 000 15 00|Ink Black|212122
@@ -2321,3 +2323,9 @@ RAL 870-6||3D3737
 RAL 870-M|Metallic|4D4747
 """
 }
+#else
+extension ColorStandards {
+    static let ralDesignTable = ""
+    static let ralEffectTable = ""
+}
+#endif

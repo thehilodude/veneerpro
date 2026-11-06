@@ -44,7 +44,7 @@ enum SubstanceRenderer {
         return candidates.first(where: fm.isExecutableFile(atPath:)).map(URL.init(fileURLWithPath:))
     }
 
-    static var isAvailable: Bool { executable != nil }
+    static var isAvailable: Bool { !Distribution.isAppStore && executable != nil }
 
     /// Renders every output of `archive` at 2^`sizeLog2` pixels (cached by file and size) and returns
     /// the image files, named `<archive>_<output>.png` so the map classifier can sort them.

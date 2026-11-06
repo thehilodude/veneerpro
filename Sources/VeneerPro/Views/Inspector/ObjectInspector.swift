@@ -21,7 +21,7 @@ struct ObjectInspector: View {
                     Button("Delete", role: .destructive) { model.deleteSelection() }
                 }
                 Text("⌘- or ⇧-click parts in the viewer or rows in the Scene list to add or remove them.")
-                    .font(.caption2).foregroundStyle(.tertiary)
+                    .appFont(10).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         } else if let node = model.selectedNode, let document = model.selectedDocument {
@@ -31,10 +31,10 @@ struct ObjectInspector: View {
                 .id(ObjectIdentifier(node))
         } else {
             VStack(spacing: 8) {
-                Image(systemName: "cube.transparent").font(.largeTitle).foregroundStyle(.tertiary)
-                Text("No Object Selected").font(.headline)
+                Image(systemName: "cube.transparent").appFont(26).foregroundStyle(.tertiary)
+                Text("No Object Selected").appFont(13, weight: .semibold)
                 Text("Click a part in the viewport, or pick one in the sidebar's Scene tab.")
-                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    .appFont(10).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 30)
@@ -81,7 +81,7 @@ private struct ObjectDetails: View {
                 model.setTransform(node, scale: $0)
             }
             Text("In the model's own units. Drag a field's label to scrub.")
-                .font(.caption2).foregroundStyle(.tertiary)
+                .appFont(10).foregroundStyle(.tertiary)
             VectorField(title: node.customPivot == nil ? "Pivot (center)" : "Pivot", value: node.pivotPoint, step: 0.01) {
                 model.setPivot(node, to: $0)
             }
@@ -118,7 +118,7 @@ private struct ObjectDetails: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(entry.name).lineLimit(1)
                         if sharedElsewhere {
-                            Text("Shared with other objects").font(.caption2).foregroundStyle(.orange)
+                            Text("Shared with other objects").appFont(10).foregroundStyle(.orange)
                         }
                     }
                     Spacer()
@@ -135,7 +135,7 @@ private struct ObjectDetails: View {
             }
             .help("Copies this object's materials so editing them, or applying a library material, changes only this object.")
             Text("Tip: with an object selected, the material library's Apply button applies to that object only.")
-                .font(.caption2).foregroundStyle(.tertiary)
+                .appFont(10).foregroundStyle(.tertiary)
         }
         .onAppear { name = node.name ?? "" }
     }
@@ -151,7 +151,7 @@ private struct VectorField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(title).appFont(10).foregroundStyle(.secondary)
             HStack(spacing: 4) {
                 ForEach(0..<3, id: \.self) { axis in
                     AxisField(label: ["X", "Y", "Z"][axis], tint: [Color.red, .green, .blue][axis],
@@ -177,7 +177,7 @@ private struct AxisField: View {
     var body: some View {
         HStack(spacing: 2) {
             Text(label)
-                .font(.system(size: 10, weight: .bold))
+                .appFont(10, weight: .bold)
                 .foregroundStyle(tint)
                 .frame(width: 12)
                 .contentShape(Rectangle())
@@ -189,7 +189,7 @@ private struct AxisField: View {
             TextField(label, value: Binding(get: { Double(value) }, set: { onChange(Float($0)) }),
                       format: .number.precision(.fractionLength(0...3)))
                 .textFieldStyle(.roundedBorder)
-                .font(.system(size: 11).monospacedDigit())
+                .appFont(11, monospacedDigits: true)
                 .controlSize(.small)
         }
     }
@@ -225,11 +225,11 @@ private struct HingeSection: View {
                 }
                 .controlSize(.small)
                 Text("Swings around the pivot (orange line in the viewer). Move the pivot onto the hinge line first.")
-                    .font(.caption2).foregroundStyle(.tertiary)
+                    .appFont(10).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("Swing this object around its pivot, like a lid or a door.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .appFont(10).foregroundStyle(.secondary)
                 HStack(spacing: 6) {
                     Text("Add Hinge")
                     ForEach(0..<3, id: \.self) { axis in
@@ -239,7 +239,7 @@ private struct HingeSection: View {
                 }
                 .controlSize(.small)
                 Text("Set the pivot on the hinge line first (Transform ▸ Pivot, or the gumball's Edit Pivot).")
-                    .font(.caption2).foregroundStyle(.tertiary)
+                    .appFont(10).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -247,11 +247,11 @@ private struct HingeSection: View {
 
     private func limitField(_ title: String, _ value: Double, set: @escaping (Double) -> Void) -> some View {
         HStack(spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(title).appFont(10).foregroundStyle(.secondary)
             TextField(title, value: Binding(get: { value }, set: set), format: .number.precision(.fractionLength(0)))
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 56)
-            Text("°").font(.caption).foregroundStyle(.secondary)
+            Text("°").appFont(10).foregroundStyle(.secondary)
         }
     }
 }

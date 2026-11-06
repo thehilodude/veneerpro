@@ -212,7 +212,7 @@ struct NodeEditorView: View {
             Divider().frame(height: 16)
             Button { setZoom(zoom / 1.2, around: center) } label: { Image(systemName: "minus.magnifyingglass") }
                 .help("Zoom Out")
-            Text("\(Int(zoom * 100))%").font(.system(size: 11).monospacedDigit()).frame(width: 40)
+            Text("\(Int(zoom * 100))%").appFont(11, monospacedDigits: true).frame(width: 40)
             Button { setZoom(zoom * 1.2, around: center) } label: { Image(systemName: "plus.magnifyingglass") }
                 .help("Zoom In")
             Button { fit() } label: { Image(systemName: "arrow.up.left.and.down.right.magnifyingglass") }
@@ -230,7 +230,7 @@ struct NodeEditorView: View {
 
     private var hint: some View {
         Text("Drag ports to connect · drag background or scroll to pan · ⌘-scroll or pinch to zoom · drop images to add textures")
-            .font(.system(size: 10))
+            .appFont(10)
             .foregroundStyle(.secondary)
             .padding(8)
     }

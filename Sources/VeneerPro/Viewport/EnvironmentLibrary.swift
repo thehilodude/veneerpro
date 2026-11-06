@@ -284,6 +284,7 @@ final class EnvironmentLibrary {
     /// Adds files (or every HDRI inside dropped folders). Returns the sources that were added.
     @discardableResult
     func add(_ urls: [URL]) -> [EnvironmentSource] {
+        urls.forEach(FileAccess.remember)
         var added: [URL] = []
         for url in urls {
             var isDir: ObjCBool = false

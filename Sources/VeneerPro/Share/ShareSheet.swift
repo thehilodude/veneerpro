@@ -13,11 +13,11 @@ struct ShareSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "qrcode").font(.system(size: 18, weight: .semibold)).foregroundStyle(Color.accentColor)
+                Image(systemName: "qrcode").appFont(18, weight: .semibold).foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Share to iPhone or iPad").font(.system(size: 15, weight: .semibold))
+                    Text("Share to iPhone or iPad").appFont(15, weight: .semibold)
                     Text(share.document?.name ?? model.selectedDocument?.name ?? "")
-                        .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                        .appFont(12).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer()
             }
@@ -38,7 +38,7 @@ struct ShareSheet: View {
             if let url = share.pageURL {
                 HStack(spacing: 8) {
                     Text(url.absoluteString)
-                        .font(.system(size: 11, design: .monospaced))
+                        .appFont(11, design: .monospaced)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -58,7 +58,7 @@ struct ShareSheet: View {
             }
 
             HStack(spacing: 8) {
-                Text("Or send the file:").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                Text("Or send the file:").appFont(11.5).foregroundStyle(.secondary)
                 sendButton("AirDrop", symbol: "airplayaudio", service: .sendViaAirDrop)
                 sendButton("Messages", symbol: "message", service: .composeMessage)
                 sendButton("Mail", symbol: "envelope", service: .composeEmail)
@@ -70,7 +70,7 @@ struct ShareSheet: View {
 
             HStack {
                 Text("Anyone on this Wi-Fi with the link can view the model until you stop sharing.")
-                    .font(.system(size: 10.5)).foregroundStyle(.tertiary)
+                    .appFont(10.5).foregroundStyle(.tertiary)
                 Spacer()
                 Button("Stop Sharing", role: .destructive) {
                     share.stop()
@@ -100,7 +100,7 @@ struct ShareSheet: View {
                     .resizable()
                     .padding(12)
             } else if case let .failed(message) = share.status {
-                Text(message).font(.system(size: 11)).foregroundStyle(.red).multilineTextAlignment(.center).padding(12)
+                Text(message).appFont(11).foregroundStyle(.red).multilineTextAlignment(.center).padding(12)
             } else {
                 ProgressView().controlSize(.small).colorScheme(.light)
             }
@@ -119,17 +119,17 @@ struct ShareSheet: View {
                 Text("Up to date · \(updated.formatted(date: .omitted, time: .shortened))")
             }
         }
-        .font(.system(size: 11.5))
+        .appFont(11.5)
         .foregroundStyle(.secondary)
     }
 
     private func instruction(_ number: Int, _ text: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text("\(number)")
-                .font(.system(size: 11, weight: .bold))
+                .appFont(11, weight: .bold)
                 .frame(width: 18, height: 18)
                 .background(Circle().fill(Color.accentColor.opacity(0.25)))
-            Text(text).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
+            Text(text).appFont(12).fixedSize(horizontal: false, vertical: true)
         }
     }
 

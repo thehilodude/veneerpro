@@ -27,7 +27,7 @@ final class MaterialLibrary {
     /// Why the selected online library couldn't load (e.g. offline).
     private(set) var loadError: String?
 
-    private static let fixedSources = OnlineLibrary.Provider.allCases.map(\.source)
+    private static let fixedSources = OnlineLibrary.Provider.available.map(\.source)
 
     private static func isFixed(_ url: URL) -> Bool { OnlineLibrary.isOnline(url) }
     /// The library being browsed.
@@ -101,6 +101,8 @@ final class MaterialLibrary {
 
     /// Libraries installed by Visune and KeyShot, if present.
     nonisolated static var detectedLibraries: [URL] {
+        // The sandboxed App Store edition can only open folders the user picks.
+        if Distribution.isAppStore { return [] }
         let fm = FileManager.default
         var candidates = [fm.homeDirectoryForCurrentUser.appendingPathComponent("Documents/Visune Asset Library/Materials")]
         // KeyShot Studio / KeyShot 2023+ / older "KeyShot 11" resource folders.
@@ -142,6 +144,7 @@ final class MaterialLibrary {
     }
 
     func add(_ url: URL) {
+        FileAccess.remember(url)
         // Picking a whole asset library? Narrow to its Materials folder.
         let materials = url.appendingPathComponent("Materials", isDirectory: true)
         var isDir: ObjCBool = false

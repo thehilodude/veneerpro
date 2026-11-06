@@ -71,16 +71,16 @@ struct FilterPanel: View {
                     HStack(spacing: 5) {
                         Image(systemName: "line.3.horizontal.decrease.circle\(selection.isEmpty ? "" : ".fill")")
                             .foregroundStyle(selection.isEmpty ? Color.secondary : Color.accentColor)
-                        Text("Filters").font(.system(size: 11.5, weight: .semibold))
+                        Text("Filters").appFont(11.5, weight: .semibold)
                         if !selection.isEmpty {
                             Text("\(selection.count)")
-                                .font(.system(size: 10, weight: .bold))
+                                .appFont(10, weight: .bold)
                                 .padding(.horizontal, 5).padding(.vertical, 1)
                                 .background(Capsule().fill(Color.accentColor))
                                 .foregroundStyle(.white)
                         }
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 8, weight: .bold))
+                            .appFont(8, weight: .bold)
                             .foregroundStyle(.secondary)
                             .rotationEffect(.degrees(expanded ? 90 : 0))
                     }
@@ -91,7 +91,7 @@ struct FilterPanel: View {
                 if !selection.isEmpty {
                     Button("Clear") { selection = [] }
                         .buttonStyle(.plain)
-                        .font(.system(size: 11))
+                        .appFont(11)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -99,7 +99,7 @@ struct FilterPanel: View {
                 ForEach(groups.filter { !$0.options.isEmpty }) { group in
                     VStack(alignment: .leading, spacing: 5) {
                         Text(group.title.uppercased())
-                            .font(.system(size: 9.5, weight: .semibold))
+                            .appFont(9.5, weight: .semibold)
                             .foregroundStyle(.tertiary)
                         let long = group.options.count > Self.shortListLength
                         let showAll = showingAll.contains(group.title)
@@ -115,7 +115,7 @@ struct FilterPanel: View {
                                     if showAll { showingAll.remove(group.title) } else { showingAll.insert(group.title) }
                                 }
                                 .buttonStyle(.plain)
-                                .font(.system(size: 10.5, weight: .semibold))
+                                .appFont(10.5, weight: .semibold)
                                 .foregroundStyle(Color.accentColor)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 3.5)
@@ -151,7 +151,7 @@ struct FilterChip: View {
                 Text(title).lineLimit(1)
                 Text("\(count)").foregroundStyle(selected ? Color.white.opacity(0.75) : .secondary)
             }
-            .font(.system(size: 10.5, weight: .medium))
+            .appFont(10.5, weight: .medium)
             .padding(.horizontal, 8)
             .padding(.vertical, 3.5)
             .background(Capsule().fill(selected ? Color.accentColor : hovering ? Theme.controlHover : Theme.control))

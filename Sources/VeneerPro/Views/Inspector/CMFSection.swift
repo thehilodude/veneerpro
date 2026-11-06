@@ -5,6 +5,8 @@ struct CMFSection: View {
     let entry: MaterialEntry
     /// The color picker opens inline, under the color, so it never covers the model.
     @AppStorage("ColorPickerOpen") private var choosingColor = false
+    /// Off by default: students turn it on; professionals never see matches or spec-sheet lines.
+    @AppStorage(SprayPaints.settingKey) private var showSprayMatches = false
 
     var body: some View {
         let graph = entry.graph
@@ -19,15 +21,15 @@ struct CMFSection: View {
                 .help("Choose a color by RAL code, hex, RGB or L*a*b*")
                 VStack(alignment: .leading, spacing: 2) {
                     if let code = spec.colorCode, graph.colorMatchesSpec {
-                        Text(code).font(.system(size: 13, weight: .semibold))
-                        if let name = spec.colorName { Text(name).font(.system(size: 11.5)).foregroundStyle(.secondary) }
+                        Text(code).appFont(13, weight: .semibold)
+                        if let name = spec.colorName { Text(name).appFont(11.5).foregroundStyle(.secondary) }
                     } else if graph.baseColorIsLinked {
-                        Text("Texture").font(.system(size: 13, weight: .semibold))
-                        Text("Base color comes from a node").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                        Text("Texture").appFont(13, weight: .semibold)
+                        Text("Base color comes from a node").appFont(11.5).foregroundStyle(.secondary)
                     } else {
-                        Text("Custom Color").font(.system(size: 13, weight: .semibold))
+                        Text("Custom Color").appFont(13, weight: .semibold)
                         if let code = spec.colorCode {
-                            Text("Changed from \(code)").font(.system(size: 11.5)).foregroundStyle(.orange)
+                            Text("Changed from \(code)").appFont(11.5).foregroundStyle(.orange)
                         }
                     }
                     if let rgb = graph.constantBaseColor { ColorReadout(rgb: rgb) }
@@ -42,6 +44,9 @@ struct CMFSection: View {
                 ColorStandardPicker(graph: graph)
                     .background(RoundedRectangle(cornerRadius: Theme.corner).fill(Theme.control))
                     .transition(.opacity)
+            }
+            if showSprayMatches, let rgb = graph.constantBaseColor {
+                SprayMatches(rgb: rgb, code: graph.colorMatchesSpec ? spec.colorCode : nil, finish: SprayFinish(graph: graph))
             }
 
             Divider().padding(.vertical, 2)
@@ -63,10 +68,89 @@ struct CMFSection: View {
             }
             if let finish = spec.finish {
                 Text(graph.finishMatchesSpec ? finish.detail : "Changed from \(finish.name)")
-                    .font(.caption)
+                    .appFont(10)
                     .foregroundStyle(graph.finishMatchesSpec ? Color.secondary : Color.orange)
             }
+            Toggle("Show spray paint matches", isOn: $showSprayMatches)
+                .toggleStyle(.checkbox)
+                .appFont(10)
+                .foregroundStyle(.secondary)
+                .help("The closest spray paints you can buy for this color, e.g. for painting a physical model. Also adds them to spec sheets.")
         }
+    }
+}
+
+/// The spray paints closest to a color, with how close each is and a link to find it.
+private struct SprayMatches: View {
+    let rgb: SIMD3<Float>
+    /// The color's code, when it's a RAL color: RAL-matched aerosols are the exact option.
+    let code: String?
+    /// The sheen to buy or reach with a clear coat, and finishes paint can't match.
+    let finish: SprayFinish
+
+    var body: some View {
+        let matches = SprayPaints.matches(for: rgb, code: code)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Spray paint matches").appFont(11.5, weight: .semibold)
+            if let advice = finish.advice(for: matches.map(\.paint)) {
+                Label(advice, systemImage: finish.limit == nil ? "sparkles" : "exclamationmark.triangle")
+                    .appFont(10)
+                    .foregroundStyle(finish.limit == nil ? Color.secondary : Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let url = SprayPaints.ralSprayURL(for: code), let code {
+                Link(destination: url) {
+                    HStack(spacing: 8) {
+                        ColorChip(color: rgb, size: 22)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("\(code) spray paint\(finish.sheenLabel.map { ", \($0)" } ?? "")").appFont(12, weight: .medium)
+                            Text("Exact: RAL-matched aerosol, or mixed into a can at a paint store").appFont(10).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up.right.square").foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            ForEach(matches, id: \.self) { match in
+                Link(destination: match.paint.searchURL) {
+                    HStack(spacing: 8) {
+                        ColorChip(color: match.paint.rgb, size: 22)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(match.paint.title).appFont(12).lineLimit(1)
+                            Text([match.ralNamesake.map { "Named after \($0)" }, match.closeness, "ΔE \(String(format: "%.1f", match.deltaE))",
+                                  finish.clearCoat(over: match.paint).map { "+ \($0)" }]
+                                    .compactMap { $0 }.joined(separator: " · "))
+                                .appFont(10).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up.right.square").foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("Search for \(match.paint.title)")
+            }
+            if let namesake = SprayPaints.namesake(for: rgb, code: code, excluding: matches) {
+                Link(destination: namesake.paint.searchURL) {
+                    HStack(spacing: 8) {
+                        ColorChip(color: namesake.paint.rgb, size: 22)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(namesake.paint.title).appFont(12).lineLimit(1)
+                            Text("Named after \(namesake.ralNamesake ?? ""), but its color differs (ΔE \(String(format: "%.1f", namesake.deltaE)))")
+                                .appFont(10).foregroundStyle(.orange)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up.right.square").foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            Text("Can colors are the brand's screen approximations; spray a test piece first.")
+                .appFont(10).foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: Theme.corner).fill(Theme.control))
     }
 }
 
@@ -81,11 +165,11 @@ private struct ColorReadout: View {
         VStack(alignment: .leading, spacing: 1) {
             Text("\(ColorStandards.hexString(rgb))   RGB \(Int(c.x.rounded())) \(Int(c.y.rounded())) \(Int(c.z.rounded()))")
             Text(String(format: "L*a*b*  %.1f  %.1f  %.1f", lab.x, lab.y, lab.z))
-            if nearest.deltaE >= 0.5 {
+            if let nearest, nearest.deltaE >= 0.5 {
                 Text("Nearest \(nearest.color.code) · ΔE \(String(format: "%.1f", nearest.deltaE))")
             }
         }
-        .font(.system(size: 10.5).monospacedDigit())
+        .appFont(10.5, monospacedDigits: true)
         .foregroundStyle(.secondary)
         .textSelection(.enabled)
     }
@@ -108,7 +192,11 @@ struct ColorChip: View {
 
 /// Picks a base color from RAL Classic, or by hex/RGB, L*a*b*, or another system's code.
 private struct ColorStandardPicker: View {
-    enum Mode: String, CaseIterable { case ral = "RAL", value = "Hex/RGB", lab = "L*a*b*", other = "Other" }
+    enum Mode: String, CaseIterable {
+        case ral = "RAL", value = "Hex/RGB", lab = "L*a*b*", other = "Other"
+        /// No RAL tab when the RAL tables aren't included (App Store edition).
+        static var available: [Mode] { ColorStandards.ralClassic.isEmpty ? [.value, .lab, .other] : allCases }
+    }
 
     let graph: MaterialGraph
     @AppStorage("ColorPickerMode") private var mode: Mode = .ral
@@ -149,17 +237,17 @@ private struct ColorStandardPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Picker("", selection: $mode) {
-                ForEach(Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(Mode.available, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
 
             if graph.baseColorIsLinked {
                 Label("Applying a color replaces the texture driving Base Color.", systemImage: "info.circle")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .appFont(10).foregroundStyle(.secondary)
             }
 
-            switch mode {
+            switch Mode.available.contains(mode) ? mode : .value {
             case .ral: ralBrowser
             case .value: valueEntry
             case .lab: labEntry
@@ -236,14 +324,14 @@ private struct ColorStandardPicker: View {
             let shown = hovered ?? system.colors.first { $0.code == graph.spec.colorCode }
             HStack {
                 Text(shown.map(Self.label) ?? "\(ralColors.count.formatted()) colors")
-                    .font(.system(size: 12, weight: .medium))
+                    .appFont(12, weight: .medium)
                 Spacer()
-                if let shown { Text(ColorStandards.hexString(shown.rgb)).font(.system(size: 11).monospaced()).foregroundStyle(.secondary) }
+                if let shown { Text(ColorStandards.hexString(shown.rgb)).appFont(11, design: .monospaced).foregroundStyle(.secondary) }
             }
             Text(system == .ralEffect
                  ? "Screen colors approximate RAL Effect; metallic shades (-M) also need a metallic finish. Confirm against a physical fan deck."
                  : "Screen colors are approximations of \(system.rawValue); confirm against a physical fan deck.")
-                .font(.caption2).foregroundStyle(.tertiary)
+                .appFont(10).foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -257,7 +345,7 @@ private struct ColorStandardPicker: View {
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(applyValue)
             }
-            Text("Hex, or sRGB as 0–255 or 0–1 values.").font(.caption).foregroundStyle(.secondary)
+            Text("Hex, or sRGB as 0–255 or 0–1 values.").appFont(10).foregroundStyle(.secondary)
             Button("Apply", action: applyValue).disabled(parsed == nil)
         }
     }
@@ -280,9 +368,9 @@ private struct ColorStandardPicker: View {
             }
             if clipped {
                 Label("Outside the sRGB gamut; shown as the closest displayable color.", systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.orange)
+                    .appFont(10).foregroundStyle(.orange)
             }
-            Text("CIELAB, D65 white point.").font(.caption).foregroundStyle(.secondary)
+            Text("CIELAB, D65 white point.").appFont(10).foregroundStyle(.secondary)
             Button("Apply") {
                 graph.applyColor(rgb, code: String(format: "L*a*b* %.0f %.0f %.0f", l, a, b), name: nil)
             }
@@ -291,7 +379,7 @@ private struct ColorStandardPicker: View {
 
     private func labField(_ title: String, _ value: Binding<Double>) -> some View {
         HStack(spacing: 3) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(title).appFont(10).foregroundStyle(.secondary)
             TextField(title, value: value, format: .number.precision(.fractionLength(0...1)))
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 52)
@@ -311,7 +399,7 @@ private struct ColorStandardPicker: View {
                     .textFieldStyle(.roundedBorder)
             }
             Text("Pantone and NCS libraries are licensed, so enter the code with the sRGB value from your swatch book or supplier.")
-                .font(.caption).foregroundStyle(.secondary)
+                .appFont(10).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Apply") {
                 guard let rgb = parsed else { return }

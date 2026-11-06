@@ -24,6 +24,10 @@
     <string>27.0</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Veneer Pro sends live 3D previews to your Apple Vision Pro and shares models with iPhones and iPads on your Wi-Fi.</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.graphics-design</string>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>

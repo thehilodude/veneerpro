@@ -59,11 +59,11 @@ struct NodeView: View {
     private var header: some View {
         HStack(spacing: 6) {
             Text(node.kind.title)
-                .font(.system(size: 12, weight: .semibold))
+                .appFont(12, weight: .semibold)
                 .lineLimit(1)
             Spacer()
             if node.kind == .surfaceOutput {
-                Image(systemName: "cube.fill").font(.system(size: 10)).opacity(0.7)
+                Image(systemName: "cube.fill").appFont(10).opacity(0.7)
             }
         }
         .padding(.horizontal, 10)
@@ -86,7 +86,7 @@ struct NodeView: View {
     private func outputRow(_ index: Int, _ socket: Socket) -> some View {
         HStack {
             Spacer()
-            Text(socket.name).font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(socket.name).appFont(11).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 12)
         .frame(height: NodeLayout.row)
@@ -100,7 +100,7 @@ struct NodeView: View {
         Group {
             if connectedInputs.contains(index) {
                 HStack {
-                    Text(socket.name).font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(socket.name).appFont(11).foregroundStyle(.secondary)
                     Spacer()
                 }
             } else if socket.type == .float {
@@ -126,7 +126,7 @@ struct NodeView: View {
             ValueSlider(label: name, value: binding(name), range: range)
         case let .vector2(name, _):
             HStack(spacing: 4) {
-                Text(name).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(name).appFont(11).foregroundStyle(.secondary)
                 Spacer()
                 NumberField(value: component(name, 0))
                 NumberField(value: component(name, 1))
@@ -138,7 +138,7 @@ struct NodeView: View {
             )) {
                 ForEach(options, id: \.self) { Text($0).tag($0) }
             }
-            .font(.system(size: 11))
+            .appFont(11)
             .controlSize(.small)
         case .texture:
             TextureField(texture: node.texture) { texture in
@@ -213,7 +213,7 @@ struct ValueSlider: View {
                     Text(value.x, format: .number.precision(.fractionLength(range.upperBound > 10 ? 0 : 2)))
                         .monospacedDigit()
                 }
-                .font(.system(size: 11))
+                .appFont(11)
                 .padding(.horizontal, 6)
             }
             .contentShape(Rectangle())
@@ -233,7 +233,7 @@ struct ColorRow: View {
 
     var body: some View {
         HStack {
-            Text(label).font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(label).appFont(11).foregroundStyle(.secondary)
             Spacer()
             ColorPicker(label, selection: Binding(
                 get: { Color(.sRGB, red: Double(value.x), green: Double(value.y), blue: Double(value.z)) },
@@ -254,7 +254,7 @@ struct NumberField: View {
     var body: some View {
         TextField("", value: $value, format: .number.precision(.fractionLength(0...2)))
             .textFieldStyle(.roundedBorder)
-            .font(.system(size: 11))
+            .appFont(11)
             .controlSize(.small)
             .frame(width: 50)
     }
@@ -270,7 +270,7 @@ struct TextureField: View {
                 if let texture {
                     Image(decorative: texture.cgImage, scale: 1).resizable().interpolation(.medium)
                 } else {
-                    Image(systemName: "photo").font(.title2).foregroundStyle(.tertiary)
+                    Image(systemName: "photo").appFont(17).foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color.black.opacity(0.3))
                 }
@@ -279,10 +279,10 @@ struct TextureField: View {
             .clipShape(RoundedRectangle(cornerRadius: 4))
             VStack(alignment: .leading, spacing: 4) {
                 Text(texture?.name ?? "No Image")
-                    .font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
+                    .appFont(11).lineLimit(1).truncationMode(.middle)
                 if let texture {
                     Text("\(Int(texture.size.width))×\(Int(texture.size.height))")
-                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                        .appFont(10).foregroundStyle(.secondary)
                 }
                 HStack(spacing: 4) {
                     Button("Choose…", action: choose).controlSize(.mini)

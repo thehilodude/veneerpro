@@ -89,6 +89,7 @@ final class AppModel {
     }
     /// Opens the "Share to iPhone or iPad" sheet.
     var showShareSheet = false
+    var showSpecSheetPreview = false
     @ObservationIgnored let viewport = ViewportHandle()
 
     var selectedDocument: ModelDocument? { documents.first { $0.id == selectedDocumentID } }
@@ -230,6 +231,7 @@ final class AppModel {
     }
 
     func noteRecent(_ url: URL) {
+        FileAccess.remember(url)
         recentModels = Array(([url] + recentModels.filter { $0.standardizedFileURL != url.standardizedFileURL }).prefix(8))
         UserDefaults.standard.set(recentModels.map(\.path), forKey: "RecentModels")
     }

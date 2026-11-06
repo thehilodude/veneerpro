@@ -6,7 +6,7 @@ import SwiftUI
 struct EnvironmentInspector: View {
     @Environment(AppModel.self) private var model
     @State private var dropTargeted = false
-    @AppStorage("HDRIBrowseSource") private var browseSource: HDRISource = .polyHaven
+    @AppStorage("HDRIBrowseSource") private var browseSource: HDRISource = Distribution.isAppStore ? .ambientCG : .polyHaven
     @AppStorage("HDRIDownloadSize") private var downloadSize = "2K"
     @State private var search = ""
     @State private var filters: Set<String> = []
@@ -44,7 +44,7 @@ struct EnvironmentInspector: View {
                 Text(model.viewer.scaleScene.kind == .none
                      ? "A floor under the model that catches its shadow. Shadow Only lets the background show through. View only, never exported."
                      : "Hidden while a scale scene is showing; it has its own floor.")
-                    .font(.caption2).foregroundStyle(.tertiary)
+                    .appFont(10).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -60,15 +60,15 @@ struct EnvironmentInspector: View {
                     ScaleSceneToggles(scene: $model.viewer.scaleScene)
                         .toggleStyle(.switch)
                         .controlSize(.small)
-                        .font(.system(size: 11.5))
+                        .appFont(11.5)
                 }
                 Text("Clay reference scenes at real-world size. View only, never exported.")
-                    .font(.caption2).foregroundStyle(.tertiary)
+                    .appFont(10).foregroundStyle(.tertiary)
             }
 
             InspectorSection(title: "HDRI Library") {
                 Picker("Source", selection: $browseSource) {
-                    ForEach(HDRISource.allCases.filter { $0 != .keyShot || library.keyShotRoot != nil }) { Text($0.title).tag($0) }
+                    ForEach(HDRISource.available.filter { $0 != .keyShot || library.keyShotRoot != nil }) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -89,7 +89,10 @@ struct EnvironmentInspector: View {
             }
             return !added.isEmpty
         } isTargeted: { dropTargeted = $0 }
-        .onAppear { loadSelectedCatalog() }
+        .onAppear {
+            if !HDRISource.available.contains(browseSource) { browseSource = .ambientCG }
+            loadSelectedCatalog()
+        }
         .onChange(of: browseSource) {
             filters = []
             search = ""
@@ -121,16 +124,16 @@ struct EnvironmentInspector: View {
                 Image(systemName: "globe")
                 Text("\(provider == .polyHaven ? "Powered by Poly Haven" : "HDRIs from ambientCG") · Free CC0")
             }
-            .font(.system(size: 10.5, weight: .medium))
+            .appFont(10.5, weight: .medium)
             .foregroundStyle(.secondary)
         }
         if let error = library.catalogErrors[provider], items.isEmpty {
             VStack(spacing: 8) {
-                Image(systemName: "wifi.exclamationmark").font(.title2).foregroundStyle(.tertiary)
-                Text(error).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                Image(systemName: "wifi.exclamationmark").appFont(17).foregroundStyle(.tertiary)
+                Text(error).appFont(10).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 Button("Retry") { library.loadCatalog(provider, force: true) }
                 Button("Use the Offline Studio") { model.viewer.environment = .preset(.studio) }
-                    .buttonStyle(.link).font(.caption)
+                    .buttonStyle(.link).appFont(10)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
@@ -149,7 +152,7 @@ struct EnvironmentInspector: View {
                     && (search.isEmpty || item.name.localizedCaseInsensitiveContains(search))
             }
             HStack {
-                Text("\(shown.count) HDRIs").font(.caption).foregroundStyle(.secondary)
+                Text("\(shown.count) HDRIs").appFont(10).foregroundStyle(.secondary)
                 Spacer()
                 Picker("Download Size", selection: $downloadSize) {
                     ForEach(["1K", "2K", "4K"], id: \.self) { Text($0).tag($0) }
@@ -200,7 +203,7 @@ struct EnvironmentInspector: View {
                 && (search.isEmpty || $0.source.name.localizedCaseInsensitiveContains(search)) }
             grid(shown.map(\.source), removable: false)
             Text("Studio and Sun & Sky lighting files are re-created from KeyShot's light setups; image environments load as-is.")
-                .font(.caption2).foregroundStyle(.tertiary)
+                .appFont(10).foregroundStyle(.tertiary)
         }
     }
 
@@ -208,18 +211,18 @@ struct EnvironmentInspector: View {
 
     @ViewBuilder
     private var myHDRIs: some View {
-        Text("OFFLINE DEFAULT").font(.system(size: 9.5, weight: .semibold)).foregroundStyle(.tertiary)
+        Text("OFFLINE DEFAULT").appFont(9.5, weight: .semibold).foregroundStyle(.tertiary)
         grid(library.builtIn, removable: false)
         if !library.downloaded.isEmpty {
-            Text("DOWNLOADED").font(.system(size: 9.5, weight: .semibold)).foregroundStyle(.tertiary).padding(.top, 4)
+            Text("DOWNLOADED").appFont(9.5, weight: .semibold).foregroundStyle(.tertiary).padding(.top, 4)
             grid(library.downloaded.map { .file($0) }, removable: false, downloaded: true)
         }
-        Text("ADDED").font(.system(size: 9.5, weight: .semibold)).foregroundStyle(.tertiary).padding(.top, 4)
+        Text("ADDED").appFont(9.5, weight: .semibold).foregroundStyle(.tertiary).padding(.top, 4)
         if library.custom.isEmpty {
             VStack(spacing: 6) {
-                Image(systemName: "photo.on.rectangle.angled").font(.title2).foregroundStyle(.tertiary)
+                Image(systemName: "photo.on.rectangle.angled").appFont(17).foregroundStyle(.tertiary)
                 Text("Drop .hdr, .exr or KeyShot .hdz/.klf files here")
-                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    .appFont(10).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
@@ -247,7 +250,7 @@ struct EnvironmentInspector: View {
                     .buttonStyle(.plain)
             }
         }
-        .font(.system(size: 12))
+        .appFont(12)
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(RoundedRectangle(cornerRadius: Theme.corner).fill(Theme.control))
@@ -286,6 +289,8 @@ struct EnvironmentInspector: View {
 enum HDRISource: String, CaseIterable, Identifiable {
     case polyHaven, ambientCG, keyShot, mine
     var id: String { rawValue }
+    /// The App Store edition leaves out Poly Haven (commercial API license) and KeyShot's folder (sandbox).
+    static var available: [HDRISource] { Distribution.isAppStore ? [.ambientCG, .mine] : allCases }
     var title: String {
         switch self {
         case .polyHaven: "Poly Haven"
@@ -327,7 +332,7 @@ private struct OnlineHDRICell: View {
                 .overlay(alignment: .topTrailing) {
                     if !isDownloaded && !isDownloading {
                         Image(systemName: "icloud.and.arrow.down")
-                            .font(.system(size: 8.5, weight: .bold))
+                            .appFont(8.5, weight: .bold)
                             .padding(3.5)
                             .background(.ultraThinMaterial, in: Circle())
                             .padding(3)
@@ -337,7 +342,7 @@ private struct OnlineHDRICell: View {
                 .overlay(RoundedRectangle(cornerRadius: 6)
                     .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2.5))
             Text(item.name)
-                .font(.system(size: 10))
+                .appFont(10)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .foregroundStyle(isSelected ? .primary : .secondary)
@@ -363,7 +368,7 @@ private struct CurrentEnvironment: View {
                 .aspectRatio(2, contentMode: .fit)
                 .overlay { if let image { Image(decorative: image, scale: 1).resizable() } }
                 .clipShape(RoundedRectangle(cornerRadius: 8))
-            Text(source.name).font(.callout.weight(.medium)).lineLimit(1)
+            Text(source.name).appFont(12, weight: .medium).lineLimit(1)
         }
         .task(id: source.id) {
             image = model.environments.cachedThumbnail(source)
@@ -393,7 +398,7 @@ private struct EnvironmentCell: View {
                 .overlay(RoundedRectangle(cornerRadius: 6)
                     .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2.5))
             Text(source.name)
-                .font(.system(size: 10))
+                .appFont(10)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .foregroundStyle(isSelected ? .primary : .secondary)

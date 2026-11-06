@@ -19,6 +19,7 @@ enum SidebarTab: String, CaseIterable {
 
 struct ContentView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.textScale) private var textScale
     @State private var frameRequest = 0
     @State private var sidebarTab: SidebarTab = .models
     @State private var viewportDropTarget = false
@@ -37,7 +38,7 @@ struct ContentView: View {
                 case .library: MaterialLibraryView()
                 }
             }
-            .navigationSplitViewColumnWidth(min: 220, ideal: 300, max: 560)
+            .navigationSplitViewColumnWidth(min: 220 * textScale, ideal: 300 * textScale, max: 560)
         } detail: {
             detailContent
             // Customizable (each item has an ID) so the window's Icon and Text label style applies,
@@ -101,6 +102,9 @@ struct ContentView: View {
         .sheet(isPresented: $model.showShareSheet) {
             ShareSheet().environment(model)
         }
+        .sheet(isPresented: $model.showSpecSheetPreview) {
+            SpecSheetPreview().environment(model)
+        }
         .alert("Error", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("OK") { model.errorMessage = nil }
         } message: {
@@ -132,7 +136,7 @@ struct ContentView: View {
             .background(Theme.canvas)
             if model.showInspector {
                 InspectorView()
-                    .frame(minWidth: 260, idealWidth: 300, maxWidth: 420)
+                    .frame(minWidth: 260 * textScale, idealWidth: 300 * textScale, maxWidth: 420 * textScale)
             }
         }
     }
@@ -189,7 +193,7 @@ struct ContentView: View {
             // toolbar is laying out can send SwiftUI into a layout loop that freezes the viewport.
             if let status = statusText, !model.isBusy {
                 Text(status)
-                    .font(.callout)
+                    .appFont(12)
                     .lineLimit(1)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -319,7 +323,7 @@ struct ContentView: View {
                     .id(entry.id)
                     .overlay(alignment: .topTrailing) {
                         Text(entry.name)
-                            .font(.system(size: 12, weight: .semibold))
+                            .appFont(12, weight: .semibold)
                             .padding(.horizontal, 10).padding(.vertical, 6)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                             .padding(10)
@@ -387,11 +391,11 @@ private extension View {
 private struct DropPrompt: View {
     var body: some View {
         VStack(spacing: 10) {
-            Image(systemName: "cube.transparent").font(.system(size: 44, weight: .light))
-            Text("Drop files here").font(.title3.weight(.semibold))
-            Text("Drag in individual or multiple 3D models and folders\n(USDZ, USD, FBX, OBJ, DAE, SCN, ABC, PLY, STL)")
+            Image(systemName: "cube.transparent").appFont(44, weight: .light)
+            Text("Drop files here").appFont(15, weight: .semibold)
+            Text("Drag in individual or multiple 3D models and folders\n(\(ModelDocument.importableExtensions.filter { !["usda", "usdc"].contains($0) }.map { $0.uppercased() }.joined(separator: ", ")))")
                 .multilineTextAlignment(.center)
-                .font(.callout)
+                .appFont(12)
                 .foregroundStyle(.secondary)
         }
         .foregroundStyle(.white.opacity(0.85))
@@ -415,13 +419,13 @@ private struct ModelList: View {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(document.name).lineLimit(1)
                             Text("\(document.materials.count) materials · .\(document.sourceURL.pathExtension.lowercased())")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .appFont(10).foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 4)
                         if let side = model.displayedDocuments.count == 2
                             ? model.displayedDocuments.firstIndex(where: { $0.id == document.id }) : nil {
                             Text(side == 0 ? "A" : "B")
-                                .font(.system(size: 10, weight: .bold))
+                                .appFont(10, weight: .bold)
                                 .frame(width: 18, height: 18)
                                 .background(Circle().fill(Color.accentColor.opacity(0.85)))
                                 .foregroundStyle(.white)

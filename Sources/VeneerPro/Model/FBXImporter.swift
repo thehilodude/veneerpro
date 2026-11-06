@@ -19,7 +19,7 @@ enum FBXImporter {
             .filter { FileManager.default.fileExists(atPath: $0.path) }
     }
 
-    static var isAvailable: Bool { !pluginCandidates.isEmpty }
+    static var isAvailable: Bool { !Distribution.isAppStore && !pluginCandidates.isEmpty }
 
     // MARK: Converting (app side)
 

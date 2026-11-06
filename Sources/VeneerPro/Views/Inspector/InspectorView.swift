@@ -90,7 +90,7 @@ struct MaterialsInspector: View {
                     .fixedSize()
                     }
                     Text("Textures are baked at this size when a channel's graph modifies an image. Unmodified textures are exported as-is.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .appFont(10).foregroundStyle(.secondary)
                     HStack {
                         Button(model.showNodeEditor ? "Hide Nodes" : "Edit Nodes") { model.showNodeEditor.toggle() }
                         Spacer()
@@ -122,11 +122,11 @@ private struct MaterialRow: View {
             .frame(width: 26, height: 26)
             .clipShape(Circle())
             .overlay(Circle().strokeBorder(.separator))
-            Text(entry.name).lineLimit(1).font(.system(size: 12.5))
+            Text(entry.name).lineLimit(1).appFont(12.5)
             Spacer()
             if entry.mapping.kind != .uv {
                 Image(systemName: entry.mapping.kind.symbol)
-                    .font(.system(size: 10))
+                    .appFont(10)
                     .foregroundStyle(isSelected ? Color.white.opacity(0.8) : .secondary)
                     .help("\(entry.mapping.kind.rawValue) mapping")
             }
@@ -149,15 +149,15 @@ private struct ChannelSummary: View {
             ForEach(MaterialGraph.Channel.allCases, id: \.rawValue) { channel in
                 let link = graph.link(into: PortRef(node: graph.outputNodeID, port: channel.rawValue))
                 HStack(spacing: 8) {
-                    Text(channel.name).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                    Text(channel.name).appFont(11.5).foregroundStyle(.secondary)
                     Spacer()
                     if let link, let source = graph.node(link.from.node) {
                         Label(source.kind.title, systemImage: "arrow.left")
                             .labelStyle(.titleAndIcon)
-                            .font(.system(size: 11, weight: .medium))
+                            .appFont(11, weight: .medium)
                             .foregroundStyle(Color.accentColor)
                     } else if channel == .normal || channel == .occlusion {
-                        Text("—").font(.system(size: 11)).foregroundStyle(.tertiary)
+                        Text("—").appFont(11).foregroundStyle(.tertiary)
                     } else if let v = output?.value(channel.name) {
                         if channel.isColor {
                             RoundedRectangle(cornerRadius: 3)
@@ -165,7 +165,7 @@ private struct ChannelSummary: View {
                                 .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Color.white.opacity(0.15)))
                                 .frame(width: 28, height: 14)
                         } else {
-                            Text(String(format: "%.2f", v.x)).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                            Text(String(format: "%.2f", v.x)).appFont(11, monospacedDigits: true).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -195,7 +195,7 @@ private struct MappingSection: View {
             }
             if entry.mapping.kind == .uv {
                 Text("Uses the model's own texture coordinates.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .appFont(10).foregroundStyle(.secondary)
             } else {
                 if entry.mapping.kind.hasAxis {
                     InspectorRow(title: "Axis") {
@@ -218,12 +218,12 @@ private struct MappingSection: View {
                 BarSlider(title: "Offset V", value: $entry.mapping.offset.y, range: -1...1, defaultValue: 0,
                           format: { String(format: "%+.2f", $0) })
                 Text("Projected in real-world units and baked into the model's UVs, so it carries into USDZ, FBX and Vision Pro.")
-                    .font(.caption2).foregroundStyle(.tertiary)
+                    .appFont(10).foregroundStyle(.tertiary)
             }
         } accessory: {
             if entry.mapping != TextureMapping() {
                 Button("Reset") { entry.mapping = TextureMapping() }
-                    .buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
+                    .buttonStyle(.plain).appFont(10).foregroundStyle(.secondary)
             }
         }
     }
@@ -250,7 +250,7 @@ struct PropertiesInspector: View {
                 if document.hasAnimations {
                     Label("This model is animated. Animation and skinning aren't exported; the bind pose is.",
                           systemImage: "exclamationmark.triangle")
-                        .font(.caption).foregroundStyle(.orange)
+                        .appFont(10).foregroundStyle(.orange)
                 }
             }
             InspectorSection(title: "Metadata") {
@@ -277,7 +277,7 @@ struct PropertiesInspector: View {
             InspectorSection(title: "Export") {
                 Toggle("Binary layer (smaller, faster)", isOn: $model.exportOptions.binary)
                     .disabled(!USDTools.canConvertToBinary)
-                Toggle("Validate (usdchecker / FBX read-back)", isOn: $model.exportOptions.validate)
+                Toggle(FBXImporter.isAvailable ? "Validate (usdchecker / FBX read-back)" : "Validate (usdchecker)", isOn: $model.exportOptions.validate)
                     .disabled(!USDTools.canValidate)
                 HStack {
                     Button("Export…") { model.presentExportPanel() }
@@ -301,7 +301,7 @@ struct PropertiesInspector: View {
                         Label("No issues", systemImage: "checkmark.seal").foregroundStyle(.secondary)
                     }
                     ForEach(document.issues, id: \.self) { issue in
-                        Text(issue).font(.caption).textSelection(.enabled)
+                        Text(issue).appFont(10).textSelection(.enabled)
                             .foregroundStyle(issue.hasPrefix("Error") ? .red : .orange)
                     }
                 }

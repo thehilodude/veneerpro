@@ -28,13 +28,15 @@ enum SpecSheet {
         /// "Metallic 0.00 · Roughness 0.45".
         var surface: String
         var parts: Int
+        /// Where to buy it as spray paint, and finish notes (only when spray matches are included).
+        var spray: [String] = []
     }
 
     // MARK: Collecting
 
     /// The current look of `document` as a page; the materials must already be refreshed.
     @MainActor
-    static func page(for document: ModelDocument, variant: String, renders: [CGImage]) -> Page {
+    static func page(for document: ModelDocument, variant: String, renders: [CGImage], includeSpray: Bool = false) -> Page {
         let rows = document.materials.map { entry -> Row in
             let graph = entry.graph
             let color = graph.constantBaseColor
@@ -68,8 +70,12 @@ enum SpecSheet {
             document.root.enumerateHierarchy { node, _ in
                 if !node.isHidden, node.geometry?.materials.contains(where: { materials.contains(ObjectIdentifier($0)) }) == true { parts += 1 }
             }
+            // The finish decides the sheen (or a clear coat), or says when paint can't match it.
+            let spray = includeSpray
+                ? color.map { SprayPaints.summary(for: $0, code: graph.colorMatchesSpec ? graph.spec.colorCode : nil,
+                                                  finish: SprayFinish(graph: graph)) } ?? [] : []
             return Row(name: entry.name, swatch: entry.swatch, color: color, colorTitle: colorTitle,
-                       colorValues: colorValues, finish: finish, surface: surface, parts: parts)
+                       colorValues: colorValues, finish: finish, surface: surface, parts: parts, spray: spray)
         }
         .filter { $0.parts > 0 }
 
@@ -108,21 +114,32 @@ enum SpecSheet {
     }
 
     static func write(_ pages: [Page], project: String?, to url: URL) throws {
+        guard let data = pdf(pages, project: project) else { throw CocoaError(.fileWriteUnknown) }
+        try data.write(to: url, options: .atomic)
+    }
+
+    /// The spec sheet as PDF data (for the preview and for saving).
+    static func pdf(_ pages: [Page], project: String?) -> Data? {
+        let data = NSMutableData()
         var mediaBox = CGRect(origin: .zero, size: pageSize)
-        guard let context = CGContext(url as CFURL, mediaBox: &mediaBox, [
+        guard let consumer = CGDataConsumer(data: data as CFMutableData),
+              let context = CGContext(consumer: consumer, mediaBox: &mediaBox, [
             kCGPDFContextTitle as String: "\(pages.first?.model ?? "Model") CMF Specification",
             kCGPDFContextCreator as String: "Veneer Pro",
-        ] as CFDictionary) else { throw CocoaError(.fileWriteUnknown) }
+        ] as CFDictionary) else { return nil }
 
         // Each colorway starts a page; materials that don't fit continue on the next.
+        // Rows with spray paint lines need a little more room.
+        let sprayLines = pages.flatMap(\.rows).map(\.spray.count).max() ?? 0
+        let rowHeight: CGFloat = 66 + CGFloat(sprayLines) * 11.5
         var sheets: [(page: Page, rows: ArraySlice<SpecSheet.Row>, continued: Bool)] = []
         for page in pages {
             var rows = page.rows[...]
-            let first = rows.prefix(rowsPerPage(continued: false))
+            let first = rows.prefix(rowsPerPage(continued: false, rowHeight: rowHeight))
             sheets.append((page, first, false))
             rows = rows.dropFirst(first.count)
             while !rows.isEmpty {
-                let next = rows.prefix(rowsPerPage(continued: true))
+                let next = rows.prefix(rowsPerPage(continued: true, rowHeight: rowHeight))
                 sheets.append((page, next, true))
                 rows = rows.dropFirst(next.count)
             }
@@ -136,22 +153,22 @@ enum SpecSheet {
             context.scaleBy(x: 1, y: -1)
             NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
             draw(sheet.page, rows: Array(sheet.rows), continued: sheet.continued, project: project, date: date,
-                 pageNumber: n + 1, pageCount: sheets.count)
+                 pageNumber: n + 1, pageCount: sheets.count, rowHeight: rowHeight)
             NSGraphicsContext.restoreGraphicsState()
             context.endPDFPage()
         }
         context.closePDF()
+        return data as Data
     }
 
     private static let margin: CGFloat = 36
     private static let headerHeight: CGFloat = 62
     private static let footerHeight: CGFloat = 26
-    private static let rowHeight: CGFloat = 66
     private static var contentTop: CGFloat { margin + headerHeight }
     private static var contentBottom: CGFloat { pageSize.height - margin - footerHeight }
     private static var leftWidth: CGFloat { (pageSize.width - margin * 2) * 0.54 }
 
-    private static func rowsPerPage(continued: Bool) -> Int {
+    private static func rowsPerPage(continued: Bool, rowHeight: CGFloat) -> Int {
         let height = contentBottom - contentTop - 22
         let perColumn = max(1, Int(height / rowHeight))
         return continued ? perColumn * 2 : perColumn
@@ -181,7 +198,8 @@ enum SpecSheet {
         CGRect(x: margin, y: y, width: pageSize.width - margin * 2, height: 0.75).fill()
     }
 
-    private static func draw(_ page: Page, rows: [Row], continued: Bool, project: String?, date: String, pageNumber: Int, pageCount: Int) {
+    private static func draw(_ page: Page, rows: [Row], continued: Bool, project: String?, date: String, pageNumber: Int, pageCount: Int,
+                             rowHeight: CGFloat) {
         let width = pageSize.width - margin * 2
         // Header
         draw(text(page.model, 22, .semibold), at: CGPoint(x: margin, y: margin - 4), width: width * 0.6)
@@ -194,11 +212,11 @@ enum SpecSheet {
         line(margin + headerHeight - 10)
 
         if continued {
-            drawTable(rows, in: CGRect(x: margin, y: contentTop, width: width, height: contentBottom - contentTop), columns: 2)
+            drawTable(rows, in: CGRect(x: margin, y: contentTop, width: width, height: contentBottom - contentTop), columns: 2, rowHeight: rowHeight)
         } else {
             drawRenders(page, in: CGRect(x: margin, y: contentTop, width: leftWidth, height: contentBottom - contentTop))
             let x = margin + leftWidth + 22
-            drawTable(rows, in: CGRect(x: x, y: contentTop, width: pageSize.width - margin - x, height: contentBottom - contentTop), columns: 1)
+            drawTable(rows, in: CGRect(x: x, y: contentTop, width: pageSize.width - margin - x, height: contentBottom - contentTop), columns: 1, rowHeight: rowHeight)
         }
 
         // Footer
@@ -229,7 +247,7 @@ enum SpecSheet {
              at: CGPoint(x: rect.minX, y: rect.maxY - 14), width: rect.width)
     }
 
-    private static func drawTable(_ rows: [Row], in rect: CGRect, columns: Int) {
+    private static func drawTable(_ rows: [Row], in rect: CGRect, columns: Int, rowHeight: CGFloat) {
         draw(text("Materials", 12, .semibold), at: CGPoint(x: rect.minX, y: rect.minY - 2), width: rect.width)
         let top = rect.minY + 22
         let perColumn = max(1, Int((rect.maxY - top) / rowHeight))
@@ -276,6 +294,10 @@ enum SpecSheet {
         draw(text("Finish: " + row.finish, 9, .regular), at: CGPoint(x: x, y: rect.minY + (row.colorValues == nil ? 32 : 43)), width: width)
         draw(text(row.surface, 8.5, .regular, secondary, monospacedDigits: true),
              at: CGPoint(x: x, y: rect.minY + (row.colorValues == nil ? 43 : 54)), width: width)
+        for (i, line) in row.spray.enumerated() {
+            draw(text(line, 8.5, i == 0 ? .medium : .regular, NSColor(srgbRed: 0.1, green: 0.38, blue: 0.75, alpha: 1)),
+                 at: CGPoint(x: x, y: rect.minY + (row.colorValues == nil ? 54 : 65) + CGFloat(i) * 11.5), width: width)
+        }
     }
 
     /// Draws `image` scaled to fit `rect`, centered.
@@ -289,27 +311,21 @@ enum SpecSheet {
 }
 
 extension AppModel {
-    /// Exports a spec sheet PDF for the selected model: a page per colorway, or the current materials.
+    /// Opens the spec sheet preview for the selected model; it exports from there.
     func presentSpecSheetPanel() {
-        guard let document = selectedDocument else { return }
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.pdf]
-        panel.nameFieldStringValue = "\(document.name) Spec Sheet.pdf"
-        panel.directoryURL = projectURL?.deletingLastPathComponent() ?? document.sourceURL.deletingLastPathComponent()
-        panel.message = document.colorways.isEmpty
-            ? "A CMF specification of the current materials."
-            : "A CMF specification with a page for each of the \(document.colorways.count) colorways."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        Task { await exportSpecSheet(document, to: url) }
+        guard selectedDocument != nil else { return }
+        showSpecSheetPreview = true
     }
 
-    func exportSpecSheet(_ document: ModelDocument, to url: URL, open: Bool = true) async {
+    /// Renders the spec sheet's pages: a page per colorway, or the current materials. Both versions
+    /// (with and without spray paint lines) are built, so the preview can switch between them instantly.
+    func renderSpecSheet(_ document: ModelDocument) async -> (plain: [SpecSheet.Page], spray: [SpecSheet.Page]) {
         isBusy = true
         suppressChangeTracking = true
         defer { isBusy = false; status = nil; suppressChangeTracking = false }
         EditHistory.shared.flush()
         let current = document.currentLooks, active = document.activeColorwayID
-        var pages: [SpecSheet.Page] = []
+        var plain: [SpecSheet.Page] = [], spray: [SpecSheet.Page] = []
         let variants: [(name: String, looks: [UUID: Colorway.Look]?)] = document.colorways.isEmpty
             ? [("Current materials", nil)]
             : document.colorways.map { ("Colorway: \($0.name)", $0.looks) }
@@ -322,15 +338,21 @@ extension AppModel {
             for entry in document.materials { await entry.waitForRefresh() }
             let renders = viewport.coordinator?.renderStills(of: document.root, angles: [.hero, .front, .side, .top],
                                                              size: CGSize(width: 1400, height: 1000)) ?? []
-            pages.append(SpecSheet.page(for: document, variant: variant.name, renders: renders))
+            plain.append(SpecSheet.page(for: document, variant: variant.name, renders: renders, includeSpray: false))
+            spray.append(SpecSheet.page(for: document, variant: variant.name, renders: renders, includeSpray: true))
         }
         if !document.colorways.isEmpty {
             document.applyLooks(current)
             document.applyMappingsNow()
             document.activeColorwayID = active
         }
+        return (plain, spray)
+    }
+
+    func exportSpecSheet(_ document: ModelDocument, to url: URL, open: Bool = true, includeSpray: Bool = false) async {
+        let pages = await renderSpecSheet(document)
         do {
-            try SpecSheet.write(pages, project: projectName, to: url)
+            try SpecSheet.write(includeSpray ? pages.spray : pages.plain, project: projectName, to: url)
             if open { NSWorkspace.shared.open(url) }
         } catch {
             errorMessage = "The spec sheet couldn't be saved. \(error.localizedDescription)"

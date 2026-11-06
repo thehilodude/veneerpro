@@ -10,7 +10,7 @@ struct PosesSection: View {
         InspectorSection(title: "Poses") {
             if document.poses.isEmpty {
                 Text("Arrange the model (hinges, gumball, visibility), save it as a pose, then make others like Open and Closed. They export as a Pose picker for AR Quick Look.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .appFont(10).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Save Current Pose") { model.savePose() }
                     .controlSize(.small)
@@ -21,7 +21,7 @@ struct PosesSection: View {
                 if document.poseIsModified, let active = document.activePose {
                     HStack(spacing: 6) {
                         Text("“\(active.name)” has unsaved changes")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .appFont(10).foregroundStyle(.secondary)
                             .lineLimit(1)
                         Spacer()
                         Button("Update") { model.updatePose(active) }
@@ -52,7 +52,7 @@ private struct PoseRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "figure.stand.line.dotted.figure.stand")
-                .font(.system(size: 12))
+                .appFont(12)
                 .frame(width: 20)
             if renaming {
                 TextField("Name", text: $draft)
@@ -62,16 +62,16 @@ private struct PoseRow: View {
                     .onExitCommand { renaming = false }
                     .onChange(of: nameFocused) { _, focused in if !focused { commitRename() } }
             } else {
-                Text(pose.name).lineLimit(1).font(.system(size: 12.5))
+                Text(pose.name).lineLimit(1).appFont(12.5)
                 if isActive, document.poseIsModified {
                     Text("Modified")
-                        .font(.system(size: 10, weight: .medium))
+                        .appFont(10, weight: .medium)
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .background(Capsule().fill(Color.white.opacity(0.18)))
                 }
             }
             Spacer(minLength: 0)
-            if isActive, !renaming { Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)) }
+            if isActive, !renaming { Image(systemName: "checkmark").appFont(10, weight: .bold) }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)

@@ -20,7 +20,7 @@ struct MaterialLibraryView: View {
                             Image(systemName: "globe")
                             Text("\(provider.credit) · Free CC0 materials")
                         }
-                        .font(.system(size: 10.5, weight: .medium))
+                        .appFont(10.5, weight: .medium)
                         .foregroundStyle(.secondary)
                     }
                     .padding(.bottom, 6)
@@ -78,13 +78,13 @@ struct MaterialLibraryView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 3) {
                         Text(library.root.map(library.displayName) ?? "Material Library")
-                            .font(.headline)
+                            .appFont(13, weight: .semibold)
                             .lineLimit(1)
-                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+                        Image(systemName: "chevron.down").appFont(9, weight: .bold).foregroundStyle(.secondary)
                     }
                     Text(library.sources.count > 1 ? "\(library.sources.count) libraries · \(library.materials.count) materials"
                                                    : "\(library.materials.count) materials")
-                        .font(.caption)
+                        .appFont(10)
                         .foregroundStyle(.secondary)
                 }
                 .contentShape(Rectangle())
@@ -140,7 +140,7 @@ struct MaterialLibraryView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let error = library.loadError, library.materials.isEmpty {
             VStack(spacing: 8) {
-                Image(systemName: "wifi.exclamationmark").font(.largeTitle).foregroundStyle(.tertiary)
+                Image(systemName: "wifi.exclamationmark").appFont(26).foregroundStyle(.tertiary)
                 Text(error).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 Button("Retry") { model.library.rescan() }
             }
@@ -148,12 +148,12 @@ struct MaterialLibraryView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if library.materials.isEmpty {
             VStack(spacing: 6) {
-                Image(systemName: "square.dashed").font(.largeTitle).foregroundStyle(.tertiary)
+                Image(systemName: "square.dashed").appFont(26).foregroundStyle(.tertiary)
                 Text("No materials found in this folder")
                     .foregroundStyle(.secondary)
                 if library.materials.isEmpty {
                     Text("Each material should be a folder of maps named like “Name_Diffuse.jpg”, “Name_Roughness.jpg”, “Name_NormalGL.jpg”.")
-                        .font(.caption).foregroundStyle(.tertiary).multilineTextAlignment(.center)
+                        .appFont(10).foregroundStyle(.tertiary).multilineTextAlignment(.center)
                 }
             }
             .padding()
@@ -235,7 +235,7 @@ struct MaterialLibraryView: View {
                 Divider()
             } else {
                 Text("Double-click to apply to the selected object (or material), or drag onto a part in the viewport.")
-                    .font(.caption)
+                    .appFont(10)
                     .foregroundStyle(.secondary)
             }
             HStack {
@@ -254,16 +254,16 @@ struct MaterialLibraryView: View {
             }
             .help("Maps larger than this are downsampled when applied, keeping exported USDZ files small.")
         }
-        .font(.caption)
+        .appFont(10)
         .padding(12)
     }
 
     private var emptyLibrary: some View {
         VStack(spacing: 12) {
-            Image(systemName: "folder.badge.plus").font(.system(size: 40, weight: .light)).foregroundStyle(.tint)
-            Text("Connect a Material Library").font(.headline)
+            Image(systemName: "folder.badge.plus").appFont(40, weight: .light).foregroundStyle(.tint)
+            Text("Connect a Material Library").appFont(13, weight: .semibold)
             Text("Add the folder where your materials live — “Visune Asset Library”, KeyShot’s “Materials” folder, or any folder of PBR texture sets.")
-                .font(.callout)
+                .appFont(12)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("Add Library Folder…") { model.library.addFolder() }
@@ -302,14 +302,14 @@ private struct MaterialTile: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 if material.onlineAsset != nil {
                     Image(systemName: "icloud.and.arrow.down")
-                        .font(.system(size: 9, weight: .bold))
+                        .appFont(9, weight: .bold)
                         .padding(4)
                         .background(.ultraThinMaterial, in: Circle())
                         .padding(4)
                         .help("Downloaded when applied")
                 } else if material.isSubstanceArchive {
                     Text("S")
-                        .font(.system(size: 9, weight: .heavy, design: .rounded))
+                        .appFont(9, weight: .heavy, design: .rounded)
                         .frame(width: 17, height: 17)
                         .background(.ultraThinMaterial, in: Circle())
                         .padding(4)
@@ -317,7 +317,7 @@ private struct MaterialTile: View {
                                                             : "Substance archive: needs Adobe Substance 3D Designer to render")
                 } else if material.isProcedural {
                     Image(systemName: "function")
-                        .font(.system(size: 9, weight: .bold))
+                        .appFont(9, weight: .bold)
                         .padding(4)
                         .background(.ultraThinMaterial, in: Circle())
                         .padding(4)
@@ -332,7 +332,7 @@ private struct MaterialTile: View {
             .shadow(color: .black.opacity(hovering ? 0.25 : 0.12), radius: hovering ? 5 : 2, y: 1)
 
             Text(material.name)
-                .font(.system(size: 10.5))
+                .appFont(10.5)
                 .lineLimit(2, reservesSpace: true)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(isSelected ? .primary : .secondary)
@@ -356,11 +356,11 @@ private struct MaterialDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(material.name).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                Text(material.name).appFont(12, weight: .semibold).lineLimit(1)
                 Spacer()
                 if let keyShot {
                     Text(keyShot.shaderType.replacingOccurrences(of: "lux_", with: "").capitalized)
-                        .font(.system(size: 10, weight: .medium))
+                        .appFont(10, weight: .medium)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(Capsule().fill(.quaternary))
                         .help("KeyShot shader type")
@@ -369,7 +369,7 @@ private struct MaterialDetail: View {
             FlowLayout(spacing: 4) {
                 ForEach(material.usableMaps, id: \.self) { kind in
                     Text(kind.rawValue)
-                        .font(.system(size: 10))
+                        .appFont(10)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(Capsule().fill(kind.isUnsupported ? Color.secondary.opacity(0.12) : Color.accentColor.opacity(0.18)))
                         .foregroundStyle(kind.isUnsupported ? .secondary : .primary)
@@ -426,7 +426,7 @@ private extension MaterialDetail {
 
     func tag(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 10))
+            .appFont(10)
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Capsule().fill(Color.accentColor.opacity(0.18)))
     }

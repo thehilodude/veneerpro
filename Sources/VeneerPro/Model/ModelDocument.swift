@@ -441,7 +441,9 @@ final class ModelDocument: Identifiable {
         root.eulerAngles = metadata.upAxis == "Z" ? SCNVector3(-Double.pi / 2, 0, 0) : SCNVector3Zero
     }
 
+    /// FBX import goes through Reality Converter's plugin, which the App Store edition can't load.
     static let importableExtensions = ["usdz", "usd", "usda", "usdc", "fbx", "obj", "dae", "scn", "abc", "ply", "stl"]
+        .filter { !Distribution.isAppStore || $0 != "fbx" }
 
     static func load(url: URL) async throws -> ModelDocument {
         let ext = url.pathExtension.lowercased()

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Mac App Store edition: sandboxed. The App Store build (build-app.sh, appstore mode) adds the application and team
+         identifiers that must match the provisioning profile. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <!-- Online materials and HDRIs; Vision Pro preview. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- Share to iPhone or iPad serves the model on the local network. -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+    <!-- Models, projects, exports, and library folders the user picks. -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <!-- Keeps access to picked library folders and recent files across launches. -->
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
+</dict>
+</plist>

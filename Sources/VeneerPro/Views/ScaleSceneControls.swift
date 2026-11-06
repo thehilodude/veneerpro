@@ -86,7 +86,7 @@ struct SizeReadout: View {
                     .help("This size looks unlikely for a real object. Set the model's base units in the Properties tab.")
                 }
             }
-            .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+            .appFont(11.5, weight: .medium, monospacedDigits: true)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(.ultraThinMaterial, in: Capsule())

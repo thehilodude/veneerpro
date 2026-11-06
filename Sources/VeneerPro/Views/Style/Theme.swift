@@ -37,11 +37,11 @@ struct InspectorSection<Content: View, Accessory: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
+                    .appFont(9, weight: .bold)
                     .foregroundStyle(.secondary)
                     .rotationEffect(.degrees(collapsed ? 0 : 90))
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .appFont(13, weight: .semibold)
                 Spacer()
                 accessory
             }
@@ -97,7 +97,7 @@ struct BarSlider: View {
                     Spacer(minLength: 6)
                     Text(format(value)).monospacedDigit().foregroundStyle(.secondary)
                 }
-                .font(.system(size: 11.5))
+                .appFont(11.5)
                 .padding(.horizontal, 9)
             }
             .contentShape(Rectangle())
@@ -154,8 +154,8 @@ struct ToolTile: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
-                Image(systemName: symbol).font(.system(size: 15, weight: .regular)).frame(height: 18)
-                Text(title).font(.system(size: 9.5, weight: .medium)).lineLimit(1).minimumScaleFactor(0.8)
+                Image(systemName: symbol).appFont(15, weight: .regular).frame(height: 18)
+                Text(title).appFont(9.5, weight: .medium).lineLimit(1).minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
@@ -180,7 +180,7 @@ struct IconTabs<Tab: Hashable>: View {
             ForEach(tabs, id: \.self) { tab in
                 Button { selection = tab } label: {
                     Image(systemName: symbol(tab))
-                        .font(.system(size: 13, weight: .medium))
+                        .appFont(13, weight: .medium)
                         .frame(maxWidth: .infinity, minHeight: 24)
                         .foregroundStyle(selection == tab ? Color.white : .secondary)
                         .background(RoundedRectangle(cornerRadius: 6)
@@ -203,7 +203,7 @@ struct InspectorRow<Control: View>: View {
 
     var body: some View {
         HStack {
-            Text(title).font(.system(size: 11.5)).foregroundStyle(.secondary)
+            Text(title).appFont(11.5).foregroundStyle(.secondary)
             Spacer()
             control
         }
@@ -262,16 +262,16 @@ struct HUDLabel: View {
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: symbol)
-                .font(.system(size: 13.5, weight: .medium))
+                .appFont(13.5, weight: .medium)
                 .frame(width: 18)
             if !iconsOnly {
                 Text(title)
-                    .font(.system(size: 12, weight: .medium))
+                    .appFont(12, weight: .medium)
                     .lineLimit(1)
             }
             if isMenu, !iconsOnly {
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                    .appFont(8, weight: .bold)
                     .opacity(0.6)
             }
         }
@@ -286,4 +286,60 @@ struct HUDLabel: View {
 extension EnvironmentValues {
     /// The viewer bar drops its labels when the viewport is narrow.
     @Entry var hudIconsOnly = false
+}
+
+// MARK: - Text size
+
+/// The app-wide text size (View ▸ Text Size). Every font in the app goes through `appFont`, which
+/// scales by it, and each window's default text (buttons, toggles, fields) scales too.
+enum TextSize {
+    static let key = "TextSize"
+    static let steps: [CGFloat] = [1.0, 1.12, 1.25, 1.4]
+    /// A step larger than the original sizes, which ran small.
+    static let defaultStep = 1
+
+    static var step: Int {
+        get { UserDefaults.standard.object(forKey: key) as? Int ?? defaultStep }
+        set { UserDefaults.standard.set(min(max(newValue, 0), steps.count - 1), forKey: key) }
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var textScale: CGFloat = 1
+}
+
+private struct AppFont: ViewModifier {
+    @Environment(\.textScale) private var scale
+    let size: CGFloat
+    let weight: Font.Weight
+    let design: Font.Design
+    let monospacedDigits: Bool
+
+    func body(content: Content) -> some View {
+        let font = Font.system(size: (size * scale).rounded(), weight: weight, design: design)
+        content.font(monospacedDigits ? font.monospacedDigit() : font)
+    }
+}
+
+/// Applies the text size setting to a window's content.
+private struct AppTextSize: ViewModifier {
+    @AppStorage(TextSize.key) private var step = TextSize.defaultStep
+
+    func body(content: Content) -> some View {
+        let scale = TextSize.steps[min(max(step, 0), TextSize.steps.count - 1)]
+        content
+            .environment(\.textScale, scale)
+            .font(.system(size: (13 * scale).rounded()))
+    }
+}
+
+extension View {
+    /// A system font at `size` points, scaled by the text size setting.
+    func appFont(_ size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default,
+                 monospacedDigits: Bool = false) -> some View {
+        modifier(AppFont(size: size, weight: weight, design: design, monospacedDigits: monospacedDigits))
+    }
+
+    /// Scales this window's text by the text size setting.
+    func appTextSize() -> some View { modifier(AppTextSize()) }
 }

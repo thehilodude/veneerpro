@@ -1,10 +1,14 @@
 {
+  "features" : [
+    "refractivity",
+    "specular-location"
+  ],
   "fill-specializations" : [
     {
       "value" : {
         "linear-gradient" : [
-          "srgb:1.00000,1.00000,1.00000,1.00000",
-          "srgb:0.92549,0.93333,0.94902,1.00000"
+          "display-p3:0.00000,0.00000,0.00000,1.00000",
+          "display-p3:0.56592,0.56592,0.55908,1.00000"
         ]
       }
     },
@@ -12,60 +16,130 @@
       "appearance" : "dark",
       "value" : {
         "linear-gradient" : [
-          "srgb:0.17255,0.17255,0.18824,1.00000",
-          "srgb:0.08235,0.08235,0.09020,1.00000"
+          "display-p3:0.15896,0.15835,0.15654,1.00000",
+          "display-p3:0.56592,0.56592,0.55908,1.00000"
         ]
       }
     }
   ],
   "groups" : [
     {
+      "blur-material" : 0.5,
+      "hidden" : false,
       "layers" : [
         {
-          "image-name-specializations" : [
-            {
-              "value" : "center-black.png"
-            },
-            {
-              "appearance" : "dark",
-              "value" : "center-white.png"
-            }
-          ],
-          "name" : "Center"
+          "fill" : {
+            "automatic-gradient" : "display-p3:0.53849,0.53849,0.53849,1.00000"
+          },
+          "image-name" : "IconBorder-filled.png",
+          "name" : "IconBorder-filled"
         }
       ],
-      "name" : "Center",
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.4
+      "lighting" : "combined",
+      "refractivity" : {
+        "depth" : 0.91125,
+        "enabled" : true,
+        "strength" : 0.856328125
       },
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.9
+      },
+      "specular" : true,
       "translucency" : {
-        "enabled" : false,
-        "value" : 0.5
+        "enabled" : true,
+        "value" : 0.3
       }
     },
     {
+      "blur-material" : null,
+      "hidden" : false,
       "layers" : [
         {
-          "glass" : true,
-          "image-name" : "brackets.png",
-          "name" : "Brackets"
+          "image-name" : "OuterShell.png",
+          "name" : "OuterShell",
+          "position" : {
+            "scale" : 0.59,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "image-name" : "WoodVeneer.png",
+          "name" : "WoodVeneer",
+          "position" : {
+            "scale" : 0.59,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "image-name" : "GlassCurve.png",
+          "name" : "GlassCurve",
+          "position" : {
+            "scale" : 0.59,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "image-name" : "MetalBack.png",
+          "name" : "MetalBack",
+          "position" : {
+            "scale" : 0.59,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "hidden" : false,
+          "image-name" : "FullLogo.png",
+          "name" : "FullLogo",
+          "position" : {
+            "scale" : 0.59,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         }
       ],
-      "name" : "Brackets",
+      "lighting" : "combined",
+      "position" : {
+        "scale" : 1.01,
+        "translation-in-points" : [
+          0,
+          14
+        ]
+      },
+      "refractivity" : {
+        "depth" : 0.5224609375,
+        "enabled" : true,
+        "strength" : 0.3203515625
+      },
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.4
+        "opacity" : 0.5
       },
+      "specular" : "outside",
       "translucency" : {
-        "enabled" : false,
-        "value" : 0.5
+        "enabled" : true,
+        "value" : 0.3
       }
     }
   ],
   "supported-platforms" : {
-    "squares" : [
-      "macOS"
-    ]
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
   }
 }

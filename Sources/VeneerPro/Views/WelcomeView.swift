@@ -48,7 +48,7 @@ struct WelcomeView: View {
         var detail: String {
             switch self {
             case .importModel:
-                "Drop files or folders onto the window, or press ⌘O. Parts and materials are read automatically — USDZ, USD, FBX, OBJ and more."
+                "Drop files or folders onto the window, or press ⌘O. Parts and materials are read automatically — \(Distribution.isAppStore ? "USDZ, USD, OBJ" : "USDZ, USD, FBX, OBJ") and more."
             case .apply:
                 "Pick from Poly Haven and ambientCG, or your Visune, KeyShot and Substance libraries. Drag a material onto a part, or double-click it to apply."
             case .refine:
@@ -103,17 +103,17 @@ struct WelcomeView: View {
                 .frame(width: 104, height: 104)
                 .shadow(color: .black.opacity(0.4), radius: 12, y: 6)
             Text("Veneer Pro")
-                .font(.system(size: 26, weight: .bold))
+                .appFont(26, weight: .bold)
                 .padding(.top, 14)
             Text("AR Model Maker & CMF Visualizer")
-                .font(.system(size: 12.5))
+                .appFont(12.5)
                 .foregroundStyle(.secondary)
                 .padding(.top, 2)
             Button {
                 if model.presentImportPanel() { close() }
             } label: {
                 Label("Import Model…", systemImage: "square.and.arrow.down")
-                    .font(.system(size: 13.5, weight: .semibold))
+                    .appFont(13.5, weight: .semibold)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
                     .foregroundStyle(.white)
@@ -124,16 +124,26 @@ struct WelcomeView: View {
             .help("Import models (⌘O)")
             .padding(.top, 26)
             Text("or drop files anywhere")
-                .font(.system(size: 11))
+                .appFont(11)
                 .foregroundStyle(.tertiary)
                 .padding(.top, 8)
+            Button {
+                openWindow(id: TourView.windowID)
+            } label: {
+                Label("Take the Tour", systemImage: "play.rectangle")
+                    .appFont(12.5, weight: .medium)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+            .help("A quick look at what Veneer Pro can do")
+            .padding(.top, 18)
             Spacer()
             Toggle("Show at launch", isOn: $showAtLaunch)
                 .toggleStyle(.checkbox)
-                .font(.system(size: 11))
+                .appFont(11)
                 .foregroundStyle(.secondary)
             Text("Version \(Self.version)")
-                .font(.system(size: 10.5))
+                .appFont(10.5)
                 .foregroundStyle(.tertiary)
                 .padding(.top, 6)
         }
@@ -151,7 +161,7 @@ struct WelcomeView: View {
             Spacer(minLength: 12)
             steps
             Text(Self.formatLine)
-                .font(.system(size: 10.5, weight: .medium))
+                .appFont(10.5, weight: .medium)
                 .tracking(0.5)
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity)
@@ -167,18 +177,18 @@ struct WelcomeView: View {
         let recent = model.recentModels.filter { FileManager.default.fileExists(atPath: $0.path) }.prefix(6)
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text("Recent").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                Text("Recent").appFont(11, weight: .semibold).foregroundStyle(.secondary)
                 Spacer()
                 if !recent.isEmpty {
                     Button("Clear") { model.clearRecentModels() }
-                        .buttonStyle(.plain).font(.system(size: 10.5)).foregroundStyle(.tertiary)
+                        .buttonStyle(.plain).appFont(10.5).foregroundStyle(.tertiary)
                 }
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 4)
             if recent.isEmpty {
                 Text("Models you import will appear here.")
-                    .font(.system(size: 12))
+                    .appFont(12)
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 8)
                     .padding(.top, 4)
@@ -195,7 +205,7 @@ struct WelcomeView: View {
         HStack(spacing: 2) {
             ForEach(Step.allCases) { step in
                 if step != .importModel {
-                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(.tertiary)
+                    Image(systemName: "chevron.right").appFont(9, weight: .bold).foregroundStyle(.tertiary)
                 }
                 stepButton(step)
             }
@@ -216,9 +226,9 @@ struct WelcomeView: View {
         ZStack {
             if let step = activeStep {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(step.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(step.tint)
+                    Text(step.title).appFont(12, weight: .semibold).foregroundStyle(step.tint)
                     Text(step.detail)
-                        .font(.system(size: 11.5))
+                        .appFont(11.5)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -241,9 +251,9 @@ struct WelcomeView: View {
             pinnedStep = pinnedStep == step ? nil : step
         } label: {
             VStack(spacing: 6) {
-                Image(systemName: step.symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(step.tint)
+                Image(systemName: step.symbol).appFont(17, weight: .semibold).foregroundStyle(step.tint)
                     .frame(height: 22)
-                Text(step.title).font(.system(size: 11.5, weight: .medium)).lineLimit(1).minimumScaleFactor(0.85)
+                Text(step.title).appFont(11.5, weight: .medium).lineLimit(1).minimumScaleFactor(0.85)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 9)
@@ -274,7 +284,8 @@ struct WelcomeView: View {
     static let blue = Color(red: 0.12, green: 0.37, blue: 0.85)
 
     /// USD, USDA and USDC read as one family on the welcome screen.
-    static let formatLine = "USDZ · USD · FBX · OBJ · DAE · SCN · ABC · PLY · STL"
+    static let formatLine = (Distribution.isAppStore ? "USDZ · USD · OBJ · DAE · SCN · ABC · PLY · STL"
+                                                     : "USDZ · USD · FBX · OBJ · DAE · SCN · ABC · PLY · STL")
 
     static var version: String {
         let info = Bundle.main.infoDictionary
@@ -292,13 +303,13 @@ private struct RecentRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 9) {
-                Image(systemName: "cube").font(.system(size: 12)).foregroundStyle(.secondary).frame(width: 18)
+                Image(systemName: "cube").appFont(12).foregroundStyle(.secondary).frame(width: 18)
                 Text(url.deletingPathExtension().lastPathComponent)
-                    .font(.system(size: 12.5))
+                    .appFont(12.5)
                     .lineLimit(1)
                 Spacer()
                 Text(url.pathExtension.uppercased())
-                    .font(.system(size: 10, weight: .medium))
+                    .appFont(10, weight: .medium)
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 8)

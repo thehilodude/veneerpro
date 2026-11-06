@@ -2,6 +2,8 @@
 // Data from the "ral-colors" package (MIT License, Copyright (c) 2022 Ibon Eskudero).
 // RAL is a trademark of RAL gGmbH; screen values are approximate, so check physical swatches.
 
+// The App Store edition leaves the RAL tables out (RAL licenses its colour data for commercial use).
+#if !APPSTORE
 extension ColorStandards {
     static let ralClassic: [StandardColor] = [
         StandardColor(system: .ral, code: "RAL 1000", name: "Green beige", hex: 0xCDBA88, group: "Yellow & Beige"),
@@ -221,3 +223,8 @@ extension ColorStandards {
         StandardColor(system: .ral, code: "RAL 9023", name: "Pearl dark grey", hex: 0x7E8182, group: "White & Black"),
     ]
 }
+#else
+extension ColorStandards {
+    static let ralClassic: [StandardColor] = []
+}
+#endif

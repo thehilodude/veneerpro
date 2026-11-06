@@ -7,6 +7,8 @@ struct VeneerProApp: App {
     @State private var model: AppModel = {
         // Must run before AppModel reads its settings.
         VeneerProApp.migrateSettings()
+        // In the App Store edition, regain access to folders and files picked in earlier sessions.
+        FileAccess.restoreAll()
         // Toolbar buttons show their names by default (NSToolbarDisplayMode.iconAndLabel). The toolbar
         // autosaves its own configuration, so a choice from its right-click menu replaces this.
         UserDefaults.standard.register(defaults: ["NSToolbar Configuration main": ["TB Display Mode": 1]])
@@ -27,6 +29,7 @@ struct VeneerProApp: App {
         .defaultSize(width: 1440, height: 900)
         .commands {
             WelcomeCommands()
+            TextSizeCommands()
             CommandGroup(replacing: .undoRedo) {
                 Button(model.history.undoName.map { "Undo \($0)" } ?? "Undo") { Self.undo(model) }
                     .keyboardShortcut("z")
@@ -92,9 +95,22 @@ struct VeneerProApp: App {
         Window("Welcome to Veneer Pro", id: WelcomeView.windowID) {
             WelcomeView()
                 .environment(model)
+                .appTextSize()
                 .preferredColorScheme(.dark)
         }
         .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
+        .defaultWindowPlacement { _, context in
+            WindowPlacement(.center)
+        }
+
+        Window("Veneer Pro Tour", id: TourView.windowID) {
+            TourView()
+                .appTextSize()
+                .preferredColorScheme(.dark)
+        }
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
@@ -116,6 +132,7 @@ private struct MainWindowRoot: View {
     var body: some View {
         ContentView()
             .environment(model)
+            .appTextSize()
             .frame(minWidth: 960, minHeight: 640)
             .preferredColorScheme(.dark)
             .onAppear {
@@ -127,6 +144,27 @@ private struct MainWindowRoot: View {
     }
 }
 
+/// View ▸ Make Text Bigger / Smaller / Actual Size.
+private struct TextSizeCommands: Commands {
+    @AppStorage(TextSize.key) private var step = TextSize.defaultStep
+
+    var body: some Commands {
+        CommandGroup(after: .toolbar) {
+            Divider()
+            Button("Make Text Bigger") { step = min(step + 1, TextSize.steps.count - 1) }
+                .keyboardShortcut("+")
+                .disabled(step >= TextSize.steps.count - 1)
+            Button("Make Text Smaller") { step = max(step - 1, 0) }
+                .keyboardShortcut("-")
+                .disabled(step <= 0)
+            Button("Actual Size") { step = TextSize.defaultStep }
+                .keyboardShortcut("0")
+                .disabled(step == TextSize.defaultStep)
+            Divider()
+        }
+    }
+}
+
 private struct WelcomeCommands: Commands {
     @Environment(\.openWindow) private var openWindow
 
@@ -134,6 +172,7 @@ private struct WelcomeCommands: Commands {
         CommandGroup(after: .help) {
             Button("Welcome to Veneer Pro") { openWindow(id: WelcomeView.windowID) }
                 .keyboardShortcut("1", modifiers: [.command, .shift])
+            Button("Veneer Pro Tour") { openWindow(id: TourView.windowID) }
         }
     }
 }

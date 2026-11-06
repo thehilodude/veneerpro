@@ -96,7 +96,7 @@ struct SceneOutline: View {
                     if expanded.contains(item.id) { expanded.remove(item.id) } else { expanded.insert(item.id) }
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
+                        .appFont(9, weight: .bold)
                         .rotationEffect(.degrees(isOpen ? 90 : 0))
                         .frame(width: 12)
                         .contentShape(Rectangle())

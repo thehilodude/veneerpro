@@ -9,7 +9,7 @@ struct ColorwaysSection: View {
         InspectorSection(title: "Colorways") {
             if document.colorways.isEmpty {
                 Text("Save the current materials as a colorway, then try other looks and switch between them.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .appFont(10).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Save Current Look") { model.saveColorway() }
                     .controlSize(.small)
@@ -20,7 +20,7 @@ struct ColorwaysSection: View {
                 if document.colorwayIsModified, let active = document.activeColorway {
                     HStack(spacing: 6) {
                         Text("“\(active.name)” has unsaved changes")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .appFont(10).foregroundStyle(.secondary)
                             .lineLimit(1)
                         Spacer()
                         Button("Update") { model.updateColorway(active) }
@@ -59,17 +59,17 @@ private struct ColorwayRow: View {
                     .onExitCommand { renaming = false }
                     .onChange(of: nameFocused) { _, focused in if !focused { commitRename() } }
             } else {
-                Text(colorway.name).lineLimit(1).font(.system(size: 12.5))
+                Text(colorway.name).lineLimit(1).appFont(12.5)
                 if isActive, document.colorwayIsModified {
                     Text("Modified")
-                        .font(.system(size: 10, weight: .medium))
+                        .appFont(10, weight: .medium)
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .background(Capsule().fill(Color.white.opacity(0.18)))
                 }
             }
             Spacer(minLength: 0)
             if isActive, !renaming {
-                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold))
+                Image(systemName: "checkmark").appFont(10, weight: .bold)
             }
         }
         .padding(.horizontal, 6)

@@ -20,6 +20,8 @@ enum OnlineLibrary {
         case ambientCG = "ambientcg"
 
         var displayName: String { self == .polyHaven ? "Poly Haven" : "ambientCG" }
+        /// Poly Haven's API needs a commercial license, so the App Store edition offers ambientCG only.
+        static var available: [Provider] { Distribution.isAppStore ? [.ambientCG] : allCases }
         var credit: String { self == .polyHaven ? "Powered by Poly Haven" : "Materials from ambientCG" }
         var website: URL { URL(string: self == .polyHaven ? "https://polyhaven.com/textures" : "https://ambientcg.com")! }
         /// The library source representing this provider.
