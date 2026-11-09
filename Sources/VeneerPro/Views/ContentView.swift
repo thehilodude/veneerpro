@@ -1,3 +1,4 @@
+#if os(macOS)
 import SceneKit
 import SpatialPreview
 import SwiftUI
@@ -559,3 +560,4 @@ private struct PoseMenu: View {
         .help("Poses: saved arrangements like Open and Closed")
     }
 }
+#endif

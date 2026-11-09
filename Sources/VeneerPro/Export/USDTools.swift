@@ -1,4 +1,7 @@
 import Foundation
+#if os(iOS)
+import USDKit
+#endif
 
 /// Optional helpers backed by the USD command-line tools that ship with macOS
 /// (`/usr/bin/usdcat`, `/usr/bin/usdchecker`). Everything degrades gracefully without them.
@@ -6,11 +9,19 @@ enum USDTools {
     static let usdcat = URL(fileURLWithPath: "/usr/bin/usdcat")
     static let usdchecker = URL(fileURLWithPath: "/usr/bin/usdchecker")
 
+    #if os(iOS)
+    static var canConvertToBinary: Bool { false }
+    static var canValidate: Bool { false }
+    #else
     static var canConvertToBinary: Bool { FileManager.default.isExecutableFile(atPath: usdcat.path) }
     static var canValidate: Bool { FileManager.default.isExecutableFile(atPath: usdchecker.path) }
+    #endif
 
     @discardableResult
     static func run(_ tool: URL, _ arguments: [String]) -> (status: Int32, output: String) {
+        #if os(iOS)
+        return (-1, "The USD command-line tools are only on the Mac.")
+        #else
         let process = Process()
         process.executableURL = tool
         process.arguments = arguments
@@ -21,15 +32,25 @@ enum USDTools {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+        #endif
     }
 
     /// Reads stage metadata (units, up axis, copyright) without loading geometry.
     static func readMetadata(url: URL) -> StageMetadata? {
-        guard ["usdz", "usd", "usda", "usdc"].contains(url.pathExtension.lowercased()),
-              canConvertToBinary else { return nil }
+        guard ["usdz", "usd", "usda", "usdc"].contains(url.pathExtension.lowercased()) else { return nil }
+        #if os(iOS)
+        // No usdcat here. USDKit gives the units and up axis (not the copyright).
+        guard let stage = try? USDStage.open(url, loadingPayloads: .none) else { return nil }
+        var metadata = StageMetadata()
+        if stage.hasAuthoredMetersPerUnit { metadata.metersPerUnit = stage.metersPerUnit }
+        if ["Y", "Z"].contains(stage.upAxis.string) { metadata.upAxis = stage.upAxis.string }
+        return metadata
+        #else
+        guard canConvertToBinary else { return nil }
         let result = run(usdcat, ["--layerMetadata", url.path])
         guard result.status == 0 else { return nil }
         return parseMetadata(result.output)
+        #endif
     }
 
     static func parseMetadata(_ text: String) -> StageMetadata {

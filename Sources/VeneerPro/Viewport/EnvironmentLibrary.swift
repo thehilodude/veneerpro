@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import ImageIO
 import Observation
 
@@ -236,6 +240,9 @@ final class EnvironmentLibrary {
 
     /// `…/KeyShot Studio/Environments` (or an older KeyShot version's), if installed.
     nonisolated static func detectKeyShotEnvironments() -> URL? {
+        #if os(iOS)
+        return nil
+        #else
         let fm = FileManager.default
         for base in [URL(fileURLWithPath: "/Library/Application Support"), fm.homeDirectoryForCurrentUser.appendingPathComponent("Documents")] {
             let names = ((try? fm.contentsOfDirectory(atPath: base.path)) ?? []).sorted().reversed()
@@ -244,6 +251,7 @@ final class EnvironmentLibrary {
                 if fm.fileExists(atPath: url.path) { return url }
             }
         }
+        #endif
         return nil
     }
 
@@ -271,6 +279,14 @@ final class EnvironmentLibrary {
 
     // MARK: Custom HDRIs
 
+    #if os(iOS)
+    /// iPad: asks the UI to show a file picker (which calls `add(_:)`). Returns nothing now.
+    var wantsFilePicker = false
+    func presentAddPanel() -> [EnvironmentSource] {
+        wantsFilePicker = true
+        return []
+    }
+    #else
     func presentAddPanel() -> [EnvironmentSource] {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
@@ -280,6 +296,7 @@ final class EnvironmentLibrary {
         guard panel.runModal() == .OK else { return [] }
         return add(panel.urls)
     }
+    #endif
 
     /// Adds files (or every HDRI inside dropped folders). Returns the sources that were added.
     @discardableResult

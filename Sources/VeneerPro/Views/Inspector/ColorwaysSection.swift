@@ -56,7 +56,7 @@ private struct ColorwayRow: View {
                     .textFieldStyle(.roundedBorder)
                     .focused($nameFocused)
                     .onSubmit(commitRename)
-                    .onExitCommand { renaming = false }
+                    .onEscapeKey { renaming = false }
                     .onChange(of: nameFocused) { _, focused in if !focused { commitRename() } }
             } else {
                 Text(colorway.name).lineLimit(1).appFont(12.5)

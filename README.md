@@ -6,6 +6,8 @@ It began as a from-scratch take on Apple's Reality Converter. The difference is 
 
 ![Veneer Pro workspace](Resources/screenshot-mapping.png)
 
+**Veneer Pro is free.** If it helps your work, you can [buy me a coffee](https://buymeacoffee.com/kevinjyp).
+
 ## Download
 
 1. Download **Veneer-Pro-macOS.zip** from the [latest release](../../releases/latest) and unzip it.
@@ -105,6 +107,7 @@ Headless conversion:
 - **AR Match** (viewer bar): shows the selected model in **RealityKit**, the renderer behind AR Quick Look and Vision Pro, using the exact USDZ that Share to iPhone sends, so what you see matches AR more closely than the editing viewer. It re-exports about a second after each edit and updates in place. Drag to orbit, scroll or pinch to zoom, double-click to reframe. View only: switch it off to select parts or use scale scenes and Compare.
 - **Objects** (sidebar Scene tab and the viewer):
   - **Selection** follows the viewer: clicking a part selects it in the Scene list, opening its groups and scrolling to it. ⌘- or ⇧-click (in the viewer or the list) selects several objects.
+  - **Exploded view** (Object tab ▸ Exploded View): a slider pulls the parts apart the way they'd come off in disassembly. Each part takes its natural way out: parts **stacked** on the same line come apart vertically, parts **side by side** at the same height (like the two halves of a shell) split apart sideways, and parts that **overhang** what they're attached to move out the way they stick out. Parts only move where they're free to (by bounding boxes), outer parts first, stopping just clear of what they pass. Groups move as blocks, then their own parts spread out (turn off **Spread parts inside groups** to keep them together). **Direction** is Auto (stacks go up and down) or X/Y/Z to send everything along one axis where it can; **Spacing** sets the gaps. **Order** is Automatic (a sensible disassembly order) or **Scene List**: the top row of the Scene list comes off first and ends up outermost, and the last row stays put; drag rows to change it and the view updates live. To control which way a part goes, right-click it in the Scene list ▸ **Explode Direction** (Up, Down, Left, Right, Front, Back, or Automatic); pinned directions are saved in the project. Gumball nudges are kept when you change the amount, every change can be undone, and **Save as Pose** stores it as an “Exploded” pose, so AR Quick Look can switch between assembled and exploded.
   - **Group and rearrange:** Object → Group (⌘G) and Ungroup (⇧⌘G); drag rows onto a group to move them in, or onto an object to move them above it; right-click for Move Up/Down, Move Out of Group and Select Parent Group (⌘↑). Objects keep their place in the scene, and every change can be undone.
   - **Gumball:** drag the arrows to move along X/Y/Z and the rings to rotate (⇧ snaps to 15°), around the selection's pivot. The viewer bar's Gumball menu switches between world and local axes and turns on **Edit Pivot**, where the arrows move the pivot instead. Pivot presets: center, bottom, origin.
   - **Hinges** (Object inspector): add a hinge around X, Y or Z through the pivot, then swing it with the Angle slider between min and max limits (an orange line shows the axis). Pivots, hinges and angles are saved in projects and exported as the object's position.

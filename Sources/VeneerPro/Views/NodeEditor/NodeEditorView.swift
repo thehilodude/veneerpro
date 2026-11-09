@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -72,7 +73,7 @@ struct NodeEditorView: View {
         .focusable()
         .focusEffectDisabled()
         .focused($focused)
-        .onDeleteCommand { deleteSelection() }
+        .onDeleteKey { deleteSelection() }
     }
 
     // MARK: Layers
@@ -409,3 +410,4 @@ private struct ScrollWheelCatcher: NSViewRepresentable {
         }
     }
 }
+#endif

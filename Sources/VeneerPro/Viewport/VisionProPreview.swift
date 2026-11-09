@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import Observation
 import SceneKit
@@ -519,4 +520,4 @@ private final class UndoBridge: USDPreviewSession.ChangeListDelegate {
     func onUndoRequest() { history?.undo() }
     func onRedoRequest() { history?.redo() }
 }
-
+#endif

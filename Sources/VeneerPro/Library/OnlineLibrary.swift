@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import Foundation
 
 /// A material in an online CC0 library, before it's downloaded.
@@ -204,14 +208,18 @@ enum OnlineLibrary {
         try FileManager.default.moveItem(at: temp, to: destination)
     }
 
-    /// Extracts a zip with the system's `ditto`.
+    /// Extracts a zip (with the system's `ditto` on the Mac; ZipReader on iPad).
     static func unzip(_ zip: URL, into folder: URL) throws {
+        #if os(iOS)
+        try ZipReader.extract(zip, into: folder)
+        #else
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         process.arguments = ["-x", "-k", zip.path, folder.path]
         try process.run()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else { throw URLError(.cannotDecodeContentData) }
+        #endif
     }
 
     /// Thumbnail image data (identified requests, cached by URLSession).

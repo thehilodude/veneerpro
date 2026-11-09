@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import SceneKit
 import simd
 
@@ -216,7 +220,7 @@ enum ScaleSceneBuilder {
         figure.addChildNode(node(SCNCylinder(radius: 0.05, height: 0.1), at: [0, 1.48, 0]))
         figure.addChildNode(node(SCNSphere(radius: 0.11), at: [0, 1.64, 0]))
         figure.simdPosition = p
-        figure.eulerAngles.y = CGFloat(angle)
+        figure.eulerAngles.y = SCNFloat(angle)
         return figure
     }
 
@@ -260,7 +264,7 @@ enum ScaleSceneBuilder {
     private static func add(_ parent: SCNNode, _ geometry: SCNGeometry, at p: SIMD3<Float>, material: SCNMaterial? = nil,
                             rotationY: Float = 0) {
         let n = node(geometry, at: p, material: material)
-        n.eulerAngles.y = CGFloat(rotationY)
+        n.eulerAngles.y = SCNFloat(rotationY)
         parent.addChildNode(n)
     }
 }

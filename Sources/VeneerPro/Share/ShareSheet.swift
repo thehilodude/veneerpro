@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import CoreImage.CIFilterBuiltins
 import SwiftUI
@@ -155,3 +156,4 @@ struct ShareSheet: View {
         return CIContext().createCGImage(scaled, from: scaled.extent)
     }
 }
+#endif

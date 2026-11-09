@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import Foundation
 
@@ -207,3 +208,4 @@ enum FBXImporter {
         return images
     }
 }
+#endif

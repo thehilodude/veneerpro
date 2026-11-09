@@ -1,3 +1,4 @@
+#if os(macOS)
 import PDFKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -151,3 +152,4 @@ private struct PDFPreview: NSViewRepresentable {
         }
     }
 }
+#endif

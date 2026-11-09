@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import SwiftUI
 
@@ -106,6 +107,18 @@ struct VeneerProApp: App {
             WindowPlacement(.center)
         }
 
+        Window("Support Veneer Pro", id: TipJarView.windowID) {
+            TipJarView()
+                .appTextSize()
+                .preferredColorScheme(.dark)
+        }
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
+        .defaultWindowPlacement { _, context in
+            WindowPlacement(.center)
+        }
+
         Window("Veneer Pro Tour", id: TourView.windowID) {
             TourView()
                 .appTextSize()
@@ -173,6 +186,10 @@ private struct WelcomeCommands: Commands {
             Button("Welcome to Veneer Pro") { openWindow(id: WelcomeView.windowID) }
                 .keyboardShortcut("1", modifiers: [.command, .shift])
             Button("Veneer Pro Tour") { openWindow(id: TourView.windowID) }
+            if TipJar.isAvailable {
+                Divider()
+                Button("Support Veneer Pro…") { openWindow(id: TipJarView.windowID) }
+            }
         }
     }
 }
@@ -318,3 +335,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let model { model.importModels(urls) } else { pendingURLs += urls }
     }
 }
+#endif

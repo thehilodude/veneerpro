@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import Observation
 import SceneKit
 
@@ -249,6 +253,8 @@ final class ModelDocument: Identifiable {
     /// Saved object arrangements (see Poses.swift), and the one last applied or saved.
     var poses: [Pose] = []
     var activePoseID: UUID?
+    /// The exploded view's settings and plan (see ExplodedView.swift).
+    var explode = ExplodeState()
 
     var meshCount: Int {
         var count = 0

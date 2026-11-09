@@ -10,8 +10,8 @@ Copy these into App Store Connect. Character limits are in brackets.
 - **SKU**: veneerpro-mac
 - **Primary category**: Graphics & Design
 - **Secondary category**: Productivity
-- **Content rights**: does not contain third-party content
-  _Downloaded materials come from CC0 libraries at the user's request._
+- **Content rights**: "Yes, it contains, shows, or accesses third-party content, and I have the necessary rights"
+  _The app downloads CC0 materials and HDRIs from ambientCG and Poly Haven, and shows RAL and spray paint names and codes for matching._
 - **Age rating**: answer "None" to every question (rated 4+).
 - **Price**: Free (Pricing and Availability → USD 0).
 
@@ -28,7 +28,7 @@ Copy these into App Store Connect. Character limits are in brackets.
 > • Separate parts into their own materials, adjust texture mapping, and undo anything
 >
 > COLOR & FINISH
-> • Pick colors from RAL Classic, RAL Design System+ and RAL Effect, or by hex, RGB or L*a*b*
+> • Pick colors from RAL Classic, RAL Design System+ and RAL Effect, or by hex, RGB or L\*a\*b\*
 > • Finish presets for paints, powder coats, anodizing, and SPI and VDI mold textures
 > • See the nearest RAL match and ΔE for any color
 > • Optional spray paint matches for students, with finish advice

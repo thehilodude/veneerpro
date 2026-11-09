@@ -1,10 +1,14 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import SceneKit
 import SwiftUI
 
 /// The 3D preview. Clicking a surface selects its object and material. In Compare mode it shows two
 /// models side by side, in the same lighting and at true relative scale.
-struct ViewportView: NSViewRepresentable {
+struct ViewportView: PlatformViewRepresentable {
     /// The models shown, in a fixed left-to-right order (one, or two when comparing).
     let documents: [ModelDocument]
     let settings: ViewerSettings
@@ -24,7 +28,15 @@ struct ViewportView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeNSView(context: Context) -> SCNView {
+    #if os(macOS)
+    func makeNSView(context: Context) -> SCNView { makeView(context: context) }
+    func updateNSView(_ view: SCNView, context: Context) { updateView(view, context: context) }
+    #else
+    func makeUIView(context: Context) -> SCNView { makeView(context: context) }
+    func updateUIView(_ view: SCNView, context: Context) { updateView(view, context: context) }
+    #endif
+
+    private func makeView(context: Context) -> SCNView {
         let view = ViewportSCNView()
         view.coordinator = context.coordinator
         view.scene = context.coordinator.scene
@@ -33,7 +45,7 @@ struct ViewportView: NSViewRepresentable {
         view.antialiasingMode = .multisampling4X
         view.rendersContinuously = false
         view.backgroundColor = .black
-        let click = NSClickGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.clicked(_:)))
+        let click = PlatformTapGesture(target: context.coordinator, action: #selector(Coordinator.clicked(_:)))
         view.addGestureRecognizer(click)
         context.coordinator.view = view
         handle.view = view
@@ -42,7 +54,7 @@ struct ViewportView: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ view: SCNView, context: Context) {
+    private func updateView(_ view: SCNView, context: Context) {
         let c = context.coordinator
         c.onPick = onPick
         let roots = documents.map(\.root)
@@ -316,7 +328,7 @@ struct ViewportView: NSViewRepresentable {
             scene.background.contents = showEnvironment ? appliedBackdrop as Any? : NSColor(white: 0.18, alpha: 1)
         }
 
-        @objc func clicked(_ gesture: NSClickGestureRecognizer) {
+        @objc func clicked(_ gesture: PlatformTapGesture) {
             if gumballTookClick { gumballTookClick = false; return }
             guard let view, !roots.isEmpty else { return }
             let point = gesture.location(in: view)
@@ -324,8 +336,13 @@ struct ViewportView: NSViewRepresentable {
             // Gesture actions are delivered on the main thread.
             MainActor.assumeIsolated {
                 let hit = ViewportHandle.hit(in: view, roots: roots, at: point)
+                #if os(macOS)
                 let flags = NSApp.currentEvent?.modifierFlags ?? []
-                onPick?(hit?.node, hit?.material, flags.contains(.command) || flags.contains(.shift))
+                let extend = flags.contains(.command) || flags.contains(.shift)
+                #else
+                let extend = false
+                #endif
+                onPick?(hit?.node, hit?.material, extend)
             }
         }
 
@@ -600,6 +617,7 @@ final class ViewportHandle {
 /// double-clicking a part to select it.
 final class ViewportSCNView: SCNView {
     weak var coordinator: ViewportView.Coordinator?
+    #if os(macOS)
 
     override func mouseDown(with event: NSEvent) {
         // Gumball handles take the drag (and the click) before the camera does.
@@ -629,4 +647,5 @@ final class ViewportSCNView: SCNView {
         guard event.clickCount < 2 else { return }
         super.mouseUp(with: event)
     }
+    #endif
 }

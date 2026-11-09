@@ -92,6 +92,7 @@ extension AppModel {
         let before = document.currentPoseStates, previous = document.activePoseID
         document.applyPoseStates(pose.states)
         document.activePoseID = pose.id
+        resetExplodeState(document)
         history.record("Apply “\(pose.name)”", undo: { [weak document] in
             document?.applyPoseStates(before)
             document?.activePoseID = previous

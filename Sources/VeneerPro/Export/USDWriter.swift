@@ -43,6 +43,8 @@ final class USDWriter {
     /// Objects some pose moves or hides. USD ranks a prim's own opinions above its variants', so these
     /// get their transform and visibility only from the variants, never in the base scene.
     var poseControlled: Set<ObjectIdentifier> = []
+    /// False writes hidden objects as visible (see `ExportOptions.hiddenAsVisible`).
+    var writesVisibility = true
     /// Each written node's prim name, for the pose overrides.
     private var primNames: [ObjectIdentifier: String] = [:]
 
@@ -352,7 +354,7 @@ final class USDWriter {
         let controlled = poseControlled.contains(ObjectIdentifier(node))
         block {
             if !controlled { writeTransform(node.transform) }
-            if node.isHidden, !controlled { line("token visibility = \"invisible\"") }
+            if node.isHidden, !controlled, writesVisibility { line("token visibility = \"invisible\"") }
             var childNames: Set<String> = []
             if let geometry = node.geometry {
                 writeMesh(geometry, name: Self.unique("Geometry", in: &childNames))

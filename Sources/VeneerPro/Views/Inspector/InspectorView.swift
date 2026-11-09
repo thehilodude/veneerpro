@@ -92,7 +92,9 @@ struct MaterialsInspector: View {
                     Text("Textures are baked at this size when a channel's graph modifies an image. Unmodified textures are exported as-is.")
                         .appFont(10).foregroundStyle(.secondary)
                     HStack {
+                        #if os(macOS)
                         Button(model.showNodeEditor ? "Hide Nodes" : "Edit Nodes") { model.showNodeEditor.toggle() }
+                        #endif
                         Spacer()
                         Button("Reset Material", role: .destructive) { entry.reset() }
                     }
@@ -280,18 +282,24 @@ struct PropertiesInspector: View {
                 Toggle(FBXImporter.isAvailable ? "Validate (usdchecker / FBX read-back)" : "Validate (usdchecker)", isOn: $model.exportOptions.validate)
                     .disabled(!USDTools.canValidate)
                 HStack {
+                    #if os(macOS)
                     Button("Export…") { model.presentExportPanel() }
                         .keyboardShortcut("e")
                     Button("Spec Sheet…") { model.presentSpecSheetPanel() }
                         .help("A PDF with renders, dimensions, and each material's color code and finish")
+                    #else
+                    Button("Export USDZ…") { model.shareExport(document) }
+                    #endif
                 }
                 if let url = document.exportedURL {
                     HStack {
                         Label(url.lastPathComponent, systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green).lineLimit(1)
                         Spacer()
-                        Button("Show") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-                            .controlSize(.small)
+                        if PlatformActions.canRevealFiles {
+                            Button("Show") { PlatformActions.reveal([url]) }
+                                .controlSize(.small)
+                        }
                     }
                 }
             }

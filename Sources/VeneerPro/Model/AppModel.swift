@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import Observation
 import SceneKit
 import UniformTypeIdentifiers
@@ -89,6 +93,10 @@ final class AppModel {
     }
     /// Opens the "Share to iPhone or iPad" sheet.
     var showShareSheet = false
+    #if os(iOS)
+    /// A finished export to hand to the share sheet (iPad).
+    var shareURL: URL?
+    #endif
     var showSpecSheetPreview = false
     @ObservationIgnored let viewport = ViewportHandle()
 
@@ -186,6 +194,7 @@ final class AppModel {
 
     // MARK: Import
 
+#if os(macOS)
     /// Returns whether the user picked something.
     @discardableResult
     func presentImportPanel() -> Bool {
@@ -197,6 +206,7 @@ final class AppModel {
         importModels(panel.urls)
         return true
     }
+#endif
 
     func importModels(_ urls: [URL]) {
         // A project replaces the workspace rather than adding to it.
@@ -255,6 +265,7 @@ final class AppModel {
         set { UserDefaults.standard.set(newValue, forKey: "ExportFormat") }
     }
 
+#if os(macOS)
     func presentExportPanel() {
         guard let document = selectedDocument else { return }
         let panel = NSSavePanel()
@@ -286,8 +297,9 @@ final class AppModel {
         let ext = format.selected
         export(documents, to: { folder.appendingPathComponent($0.name + "." + ext) })
     }
+#endif
 
-    private func export(_ docs: [ModelDocument], to destination: @escaping (ModelDocument) -> URL) {
+    func export(_ docs: [ModelDocument], to destination: @escaping (ModelDocument) -> URL) {
         Task {
             isBusy = true
             defer { isBusy = false; status = nil }
@@ -367,6 +379,7 @@ enum GroundStyle: String, CaseIterable {
     case shadowOnly = "Shadow Only"
 }
 
+#if os(macOS)
 /// The "Format: USDZ / FBX" pop-up shown in export panels.
 final class ExportFormatChooser: NSObject {
     static let formats = [("USDZ (AR Quick Look, Reality Composer)", "usdz"), ("FBX (Blender, Unity, Maya, KeyShot)", "fbx")]
@@ -392,3 +405,4 @@ final class ExportFormatChooser: NSObject {
 
     @objc private func changed() { onChange(selected) }
 }
+#endif

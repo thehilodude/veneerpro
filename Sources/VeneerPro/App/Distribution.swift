@@ -17,11 +17,26 @@ enum Distribution {
 /// bookmark; outside the sandbox these calls do nothing.
 enum FileAccess {
     private static let key = "SecurityScopedBookmarks"
+    /// Files outside the app's container need security-scoped access in the sandbox and on iPad.
+    private static var needed: Bool {
+        #if os(iOS)
+        true
+        #else
+        Distribution.isAppStore
+        #endif
+    }
+    #if os(iOS)
+    private static let createOptions: URL.BookmarkCreationOptions = []
+    private static let resolveOptions: URL.BookmarkResolutionOptions = []
+    #else
+    private static let createOptions: URL.BookmarkCreationOptions = .withSecurityScope
+    private static let resolveOptions: URL.BookmarkResolutionOptions = .withSecurityScope
+    #endif
 
     /// Saves access to `url` (a picked or dropped file or folder).
     static func remember(_ url: URL) {
-        guard Distribution.isAppStore else { return }
-        guard let data = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) else { return }
+        guard needed else { return }
+        guard let data = try? url.bookmarkData(options: createOptions, includingResourceValuesForKeys: nil, relativeTo: nil) else { return }
         var all = UserDefaults.standard.dictionary(forKey: key) as? [String: Data] ?? [:]
         all[url.standardizedFileURL.path] = data
         UserDefaults.standard.set(all, forKey: key)
@@ -29,16 +44,16 @@ enum FileAccess {
 
     /// Regains access to everything saved, at launch. Access is kept for the app's lifetime.
     static func restoreAll() {
-        guard Distribution.isAppStore else { return }
+        guard needed else { return }
         var all = UserDefaults.standard.dictionary(forKey: key) as? [String: Data] ?? [:]
         for (path, data) in all {
             var stale = false
-            guard let url = try? URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale) else {
+            guard let url = try? URL(resolvingBookmarkData: data, options: resolveOptions, relativeTo: nil, bookmarkDataIsStale: &stale) else {
                 all[path] = nil
                 continue
             }
             _ = url.startAccessingSecurityScopedResource()
-            if stale, let fresh = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) {
+            if stale, let fresh = try? url.bookmarkData(options: createOptions, includingResourceValuesForKeys: nil, relativeTo: nil) {
                 all[path] = fresh
             }
         }

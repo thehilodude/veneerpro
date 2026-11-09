@@ -171,13 +171,24 @@ extension AppModel {
         let before = nodes.compactMap(placement(of:))
         // Indices shift as earlier siblings leave the parent.
         let adjusted = index - nodes.filter { $0.parent === parent && (parent.childNodes.firstIndex(of: $0) ?? .max) < index }.count
-        let apply = {
-            for (i, node) in nodes.enumerated() { Self.reparent(node, to: parent, at: adjusted + i) }
+        let apply = { [weak self] in
+            // An exploded view is re-planned for the new order and grouping.
+            self?.withCollapsedExplode(document) {
+                for (i, node) in nodes.enumerated() { Self.reparent(node, to: parent, at: adjusted + i) }
+            }
             document.sceneChanged()
         }
+        if document.explode.amount > 0 { document.explode.plan?.apply(0, root: document.root) }
+        let collapsedBefore = nodes.compactMap(placement(of:))
+        if document.explode.amount > 0 { document.explode.plan?.apply(document.explode.amount, root: document.root) }
         apply()
         history.record(nodes.count == 1 ? "Move “\(Self.displayName(nodes[0]))”" : "Move \(nodes.count) Objects", undo: { [weak self] in
-            self?.restore(before)
+            guard let self else { return }
+            if document.explode.amount > 0 {
+                self.withCollapsedExplode(document) { self.restore(collapsedBefore) }
+            } else {
+                self.restore(before)
+            }
             document.sceneChanged()
         }, redo: apply)
     }

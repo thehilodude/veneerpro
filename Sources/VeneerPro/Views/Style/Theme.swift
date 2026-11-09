@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import SwiftUI
 
 /// Veneer Pro's look: a dark, Pixelmator/Photomator-style workspace with a recessed canvas, flat
@@ -105,7 +109,7 @@ struct BarSlider: View {
                 DragGesture(minimumDistance: 0)
                     .onChanged { drag in
                         if dragStart == nil { dragStart = fraction }
-                        let fine = NSEvent.modifierFlags.contains(.option) ? 0.1 : 1
+                        let fine = isFineAdjustKeyDown ? 0.1 : 1
                         let delta = Double(drag.translation.width / max(proxy.size.width, 1)) * fine
                         value = self.value(at: min(max(dragStart! + delta, 0), 1))
                     }

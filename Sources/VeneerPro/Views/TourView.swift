@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 /// A paged introduction to Veneer Pro's features, with screenshots (Resources/Tour/tour-N.jpg).
@@ -191,3 +192,4 @@ private struct TitleLabelStyle: LabelStyle {
         }
     }
 }
+#endif

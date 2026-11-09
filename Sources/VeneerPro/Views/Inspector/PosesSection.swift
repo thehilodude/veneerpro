@@ -50,6 +50,7 @@ private struct PoseRow: View {
     private var isActive: Bool { document.activePoseID == pose.id }
 
     var body: some View {
+        let _ = document.sceneRevision   // the Modified badge follows object moves
         HStack(spacing: 8) {
             Image(systemName: "figure.stand.line.dotted.figure.stand")
                 .appFont(12)
@@ -59,7 +60,7 @@ private struct PoseRow: View {
                     .textFieldStyle(.roundedBorder)
                     .focused($nameFocused)
                     .onSubmit(commitRename)
-                    .onExitCommand { renaming = false }
+                    .onEscapeKey { renaming = false }
                     .onChange(of: nameFocused) { _, focused in if !focused { commitRename() } }
             } else {
                 Text(pose.name).lineLimit(1).appFont(12.5)

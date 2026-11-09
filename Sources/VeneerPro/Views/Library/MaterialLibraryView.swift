@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import SwiftUI
 
 /// KeyShot-style material browser: categories, search, a thumbnail grid, and drag-to-apply.
@@ -63,11 +67,13 @@ struct MaterialLibraryView: View {
                 if let root = library.root {
                     if let provider = OnlineLibrary.Provider(source: root) {
                     Button("Refresh \(provider.displayName)") { model.library.rescan() }
-                    Button("Visit \(provider.displayName)") { NSWorkspace.shared.open(provider.website) }
+                    Button("Visit \(provider.displayName)") { PlatformActions.open(provider.website) }
                 }
                 if !OnlineLibrary.isOnline(root) {
                     Button("Rescan “\(library.displayName(root))”") { model.library.rescan() }
-                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([root]) }
+                    if PlatformActions.canRevealFiles {
+                        Button("Show in Finder") { PlatformActions.reveal([root]) }
+                    }
                     Divider()
                     Button("Remove “\(library.displayName(root))” from List", role: .destructive) {
                         model.library.remove(root)
@@ -199,9 +205,9 @@ struct MaterialLibraryView: View {
                 for entry in document.materials { model.apply(material, to: entry) }
             }
         }
-        if material.onlineAsset == nil {
+        if material.onlineAsset == nil, PlatformActions.canRevealFiles {
             Divider()
-            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([material.location]) }
+            Button("Show in Finder") { PlatformActions.reveal([material.location]) }
         }
     }
 
@@ -234,7 +240,7 @@ struct MaterialLibraryView: View {
                 .disabled(model.selectedMaterial == nil)
                 Divider()
             } else {
-                Text("Double-click to apply to the selected object (or material), or drag onto a part in the viewport.")
+                Text(UIWords.isTouch ? "Double-tap to apply to the selected object (or material)." : "Double-click to apply to the selected object (or material), or drag onto a part in the viewport.")
                     .appFont(10)
                     .foregroundStyle(.secondary)
             }

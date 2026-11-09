@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import Observation
 import SceneKit
 import simd
@@ -270,11 +274,9 @@ extension MaterialGraph {
         switch contents {
         case nil: return nil
         case let number as NSNumber: return NodeKind.gray(number.floatValue)
-        case let color as NSColor: return srgbComponents(color)
+        case let color as NSColor: return srgbComponents(color.cgColor)
         default:
-            if CFGetTypeID(contents as CFTypeRef) == CGColor.typeID, let color = NSColor(cgColor: contents as! CGColor) {
-                return srgbComponents(color)
-            }
+            if CFGetTypeID(contents as CFTypeRef) == CGColor.typeID { return srgbComponents(contents as! CGColor) }
             return nil
         }
     }
@@ -282,18 +284,18 @@ extension MaterialGraph {
     /// Graph colors are sRGB-encoded. SceneKit tags USD's linear colors as "Display P3 Linear";
     /// those are plain linear values, so only the transfer curve is undone (no gamut mapping),
     /// which keeps an import → export round trip exact.
-    private static func srgbComponents(_ color: NSColor) -> SIMD4<Float>? {
-        if let space = color.colorSpace.cgColorSpace, (space.name as String?)?.contains("Linear") == true,
-           color.numberOfComponents >= 3 {
-            var c = [CGFloat](repeating: 0, count: color.numberOfComponents)
-            color.getComponents(&c)
+    private static func srgbComponents(_ color: CGColor) -> SIMD4<Float>? {
+        if let space = color.colorSpace, (space.name as String?)?.contains("Linear") == true,
+           let c = color.components, c.count >= 3 {
             func encode(_ v: CGFloat) -> Float {
                 let x = Float(max(0, v))
                 return x <= 0.0031308 ? x * 12.92 : 1.055 * powf(x, 1 / 2.4) - 0.055
             }
-            return SIMD4(encode(c[0]), encode(c[1]), encode(c[2]), Float(color.alphaComponent))
+            return SIMD4(encode(c[0]), encode(c[1]), encode(c[2]), Float(color.alpha))
         }
-        guard let c = color.usingColorSpace(.sRGB) else { return nil }
-        return SIMD4(Float(c.redComponent), Float(c.greenComponent), Float(c.blueComponent), Float(c.alphaComponent))
+        guard let srgb = CGColorSpace(name: CGColorSpace.sRGB),
+              let converted = color.converted(to: srgb, intent: .defaultIntent, options: nil),
+              let c = converted.components, c.count >= 3 else { return nil }
+        return SIMD4(Float(c[0]), Float(c[1]), Float(c[2]), Float(converted.alpha))
     }
 }

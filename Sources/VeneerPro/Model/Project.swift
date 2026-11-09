@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import ImageIO
 import SceneKit
 import UniformTypeIdentifiers
@@ -53,7 +57,7 @@ enum ProjectFile {
                 var swatchFiles: [String] = []
                 for (i, swatch) in colorway.swatches.enumerated() {
                     let path = "Swatches/\(colorway.id.uuidString)-\(i).png"
-                    if let png = NSBitmapImageRep(cgImage: swatch).representation(using: .png, properties: [:]) {
+                    if let png = pngData(swatch) {
                         try png.write(to: staging.appendingPathComponent(path))
                         swatchFiles.append(path)
                     }
@@ -95,8 +99,9 @@ enum ProjectFile {
     private static func objectStates(_ root: SCNNode) -> [Manifest.Object] {
         var states: [Manifest.Object] = []
         func walk(_ node: SCNNode, _ path: [Int]) {
-            if node.customPivot != nil || node.hinge != nil {
-                states.append(Manifest.Object(path: path, pivot: node.customPivot.map { [$0.x, $0.y, $0.z] }, hinge: node.hinge))
+            if node.customPivot != nil || node.hinge != nil || node.explodeDirection != nil {
+                states.append(Manifest.Object(path: path, pivot: node.customPivot.map { [$0.x, $0.y, $0.z] }, hinge: node.hinge,
+                                              explode: node.explodeDirection?.rawValue))
             }
             for (i, child) in node.childNodes.enumerated() { walk(child, path + [i]) }
         }
@@ -222,6 +227,7 @@ enum ProjectFile {
                 guard let node = node(at: object.path, in: root) else { continue }
                 node.customPivot = object.pivot.flatMap { $0.count == 3 ? SIMD3($0[0], $0[1], $0[2]) : nil }
                 node.hinge = object.hinge
+                node.explodeDirection = object.explode.flatMap(ExplodeDirection.init(rawValue:))
             }
             document.poses = (model.poses ?? []).map { record in
                 Pose(name: record.name, states: record.states.compactMap { state in
@@ -293,6 +299,8 @@ private struct Manifest: Codable {
         var path: [Int]
         var pivot: [Float]?
         var hinge: Hinge?
+        /// The object's pinned exploded-view direction (ExplodeDirection), if any.
+        var explode: String?
     }
 
     struct Metadata: Codable {
@@ -485,6 +493,22 @@ extension AppModel {
         return write(to: projectURL)
     }
 
+    #if os(iOS)
+    /// iPad: saves an untitled project into the app's folder in Files (On My iPad ▸ Veneer Pro).
+    @discardableResult
+    func saveProjectAs() -> Bool {
+        guard !documents.isEmpty else { return false }
+        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let base = projectName ?? selectedDocument?.name ?? documents[0].name
+        var url = folder.appendingPathComponent(base).appendingPathExtension(ProjectFile.fileExtension)
+        var n = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = folder.appendingPathComponent("\(base) \(n)").appendingPathExtension(ProjectFile.fileExtension)
+            n += 1
+        }
+        return write(to: url)
+    }
+    #else
     @discardableResult
     func saveProjectAs() -> Bool {
         guard !documents.isEmpty else { return false }
@@ -496,6 +520,7 @@ extension AppModel {
         guard panel.runModal() == .OK, let url = panel.url else { return false }
         return write(to: url)
     }
+    #endif
 
     private func write(to url: URL) -> Bool {
         EditHistory.shared.flush()
@@ -515,6 +540,10 @@ extension AppModel {
     /// Offers to save unsaved work. Returns false if the user cancelled.
     func confirmDiscardingChanges(_ action: String) -> Bool {
         guard hasUnsavedChanges else { return true }
+        #if os(iOS)
+        // iPad apps keep work instead of asking: save it (untitled work goes to the app's folder).
+        return saveProject()
+        #else
         let alert = NSAlert()
         alert.messageText = projectName.map { "Save changes to “\($0)” before \(action)?" } ?? "Save this workspace as a project before \(action)?"
         alert.informativeText = "Your edits will be lost if you don't save them."
@@ -527,6 +556,7 @@ extension AppModel {
         case .alertThirdButtonReturn: return true
         default: return false
         }
+        #endif
     }
 
     /// Clears the workspace.

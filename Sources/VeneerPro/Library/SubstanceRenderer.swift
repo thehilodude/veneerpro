@@ -1,3 +1,4 @@
+#if os(macOS)
 import CryptoKit
 import Foundation
 
@@ -104,3 +105,4 @@ enum SubstanceRenderer {
             .filter { LibraryMaterial.imageExtensions.contains($0.pathExtension.lowercased()) }
     }
 }
+#endif

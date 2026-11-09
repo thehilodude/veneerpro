@@ -72,7 +72,7 @@ struct CMFSection: View {
                     .foregroundStyle(graph.finishMatchesSpec ? Color.secondary : Color.orange)
             }
             Toggle("Show spray paint matches", isOn: $showSprayMatches)
-                .toggleStyle(.checkbox)
+                .checkboxStyle()
                 .appFont(10)
                 .foregroundStyle(.secondary)
                 .help("The closest spray paints you can buy for this color, e.g. for painting a physical model. Also adds them to spec sheets.")

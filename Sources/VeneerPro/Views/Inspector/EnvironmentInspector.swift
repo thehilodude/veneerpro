@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import SwiftUI
 
 /// Lighting for the viewer: Poly Haven and ambientCG HDRIs, KeyShot's environments, the user's own HDRIs,
@@ -133,7 +137,7 @@ struct EnvironmentInspector: View {
                 Text(error).appFont(10).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 Button("Retry") { library.loadCatalog(provider, force: true) }
                 Button("Use the Offline Studio") { model.viewer.environment = .preset(.studio) }
-                    .buttonStyle(.link).appFont(10)
+                    .linkButtonStyle().appFont(10)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
@@ -177,7 +181,9 @@ struct EnvironmentInspector: View {
                         }
                         .contextMenu {
                             if let local {
-                                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([local]) }
+                                if PlatformActions.canRevealFiles {
+                                    Button("Show in Finder") { PlatformActions.reveal([local]) }
+                                }
                                 Button("Delete Download", role: .destructive) { deleteDownload(local) }
                             }
                         }
@@ -263,7 +269,9 @@ struct EnvironmentInspector: View {
                     .onTapGesture { model.viewer.environment = source }
                     .contextMenu {
                         if case let .file(url) = source {
-                            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                            if PlatformActions.canRevealFiles {
+                                Button("Show in Finder") { PlatformActions.reveal([url]) }
+                            }
                             if removable {
                                 Button("Remove from My HDRIs", role: .destructive) {
                                     library.remove(url)

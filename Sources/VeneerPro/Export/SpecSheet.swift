@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import SceneKit
 import UniformTypeIdentifiers
@@ -359,3 +360,4 @@ extension AppModel {
         }
     }
 }
+#endif

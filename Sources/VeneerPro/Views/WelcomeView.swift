@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import SwiftUI
 
@@ -322,3 +323,4 @@ private struct RecentRow: View {
         .help(url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
     }
 }
+#endif

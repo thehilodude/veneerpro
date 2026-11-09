@@ -71,7 +71,7 @@ struct SceneOutline: View {
                         }
                     }
                     .listStyle(.sidebar)
-                    .onDeleteCommand { model.deleteSelection() }
+                    .onDeleteKey { model.deleteSelection() }
                     .onChange(of: model.selectedNode.map(ObjectIdentifier.init)) { _, id in
                         guard let node = model.selectedNode, let id else { return }
                         reveal(node, in: document)
@@ -150,6 +150,14 @@ struct SceneOutline: View {
             Button(model.isolatedNode === node ? "Show All" : "Isolate") { model.toggleIsolation(node) }
             Button(node.isHidden ? "Show" : "Hide") { model.setHidden(node, !node.isHidden) }
             Button("Give This Object Its Own Materials") { model.makeMaterialsUnique(for: node) }
+            Menu("Explode Direction") {
+                Toggle("Automatic", isOn: Binding(get: { node.explodeDirection == nil }, set: { if $0 { model.setExplodeDirection(node, nil) } }))
+                Divider()
+                ForEach(ExplodeDirection.allCases) { direction in
+                    Toggle(direction.title, isOn: Binding(get: { node.explodeDirection == direction },
+                                                          set: { model.setExplodeDirection(node, $0 ? direction : nil) }))
+                }
+            }
             Divider()
             Button("Group") { model.selectedNodes = [node]; model.groupSelection() }
             if node.geometry == nil, !node.childNodes.isEmpty { Button("Ungroup") { model.ungroup(node) } }

@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import ImageIO
 import Observation
 
@@ -103,6 +107,9 @@ final class MaterialLibrary {
     nonisolated static var detectedLibraries: [URL] {
         // The sandboxed App Store edition can only open folders the user picks.
         if Distribution.isAppStore { return [] }
+        #if os(iOS)
+        return []
+        #else
         let fm = FileManager.default
         var candidates = [fm.homeDirectoryForCurrentUser.appendingPathComponent("Documents/Visune Asset Library/Materials")]
         // KeyShot Studio / KeyShot 2023+ / older "KeyShot 11" resource folders.
@@ -118,6 +125,7 @@ final class MaterialLibrary {
             candidates.append(adobe.appendingPathComponent(name))
         }
         return candidates.filter { fm.fileExists(atPath: $0.path) }
+        #endif
     }
 
     // MARK: Sources
@@ -132,6 +140,11 @@ final class MaterialLibrary {
         return source.lastPathComponent == "Materials" ? source.deletingLastPathComponent().lastPathComponent : source.lastPathComponent
     }
 
+    #if os(iOS)
+    /// iPad: asks the UI to show a folder picker (which calls `add(_:)`).
+    var wantsFolderPicker = false
+    func addFolder() { wantsFolderPicker = true }
+    #else
     func addFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -142,6 +155,7 @@ final class MaterialLibrary {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         add(url)
     }
+    #endif
 
     func add(_ url: URL) {
         FileAccess.remember(url)

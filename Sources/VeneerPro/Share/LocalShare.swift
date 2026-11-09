@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import Darwin
 import Network
@@ -485,3 +486,4 @@ final class LocalShare {
         return rep.representation(using: .png, properties: [:])
     }
 }
+#endif

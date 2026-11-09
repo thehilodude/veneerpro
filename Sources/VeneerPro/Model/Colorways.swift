@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import UniformTypeIdentifiers
 
 /// A saved CMF variant of one model: every material's graph and texture mapping.
@@ -155,6 +159,7 @@ extension AppModel {
         copy.activeColorwayID = copied.id
     }
 
+    #if os(macOS)
     /// Exports one file per colorway of the selected model into a folder, then restores its materials.
     func presentExportColorwaysPanel() {
         guard let document = selectedDocument, !document.colorways.isEmpty else { return }
@@ -166,7 +171,13 @@ extension AppModel {
         panel.message = "Each colorway of “\(document.name)” is exported as its own USDZ."
         panel.directoryURL = document.sourceURL.deletingLastPathComponent()
         guard panel.runModal() == .OK, let folder = panel.url else { return }
-        Task {
+        Task { await exportColorways(of: document, to: folder) }
+    }
+    #endif
+
+    /// Writes one USDZ per colorway of `document` into `folder`, then restores its materials.
+    func exportColorways(of document: ModelDocument, to folder: URL) async {
+        do {
             isBusy = true
             suppressChangeTracking = true
             defer { isBusy = false; status = nil; suppressChangeTracking = false }

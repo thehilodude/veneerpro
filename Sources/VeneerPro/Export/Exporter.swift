@@ -9,6 +9,9 @@ struct ExportOptions {
     var maxTextureSize: Int? = nil
     /// Include the model's colorways as a "Colorway" variant set (a picker in AR Quick Look). USDZ only.
     var colorwayVariants = true
+    /// Writes hidden objects as visible, for a viewer that shows and hides them itself: RealityKit
+    /// never draws a prim that was loaded invisible, even if its entity is enabled later.
+    var hiddenAsVisible = false
 }
 
 enum Exporter {
@@ -37,6 +40,7 @@ enum Exporter {
             }
             let writer = USDWriter(rootName: name)
             writer.maxTextureSize = options.maxTextureSize
+            writer.writesVisibility = !options.hiddenAsVisible
             writer.poseVariants = poseVariants
             writer.poseControlled = poseControlled
             writer.colorwayVariants = variantJobs.map { variant in
@@ -64,6 +68,35 @@ enum Exporter {
 
             try USDZPackager.write([layer] + writer.files, to: url)
             return options.validate ? USDTools.validate(url) : []
+        }.value
+    }
+
+    /// The prims `exportLooks` writes are named this plus the look's index.
+    static let lookPrefix = "VeneerLook"
+
+    /// Writes just materials as a USDZ: one small plane per look, for loading materials without the
+    /// model's geometry (the iPad's AR view swaps them to change colorways instantly).
+    @MainActor
+    static func exportLooks(_ looks: [Colorway.Look], metadata: StageMetadata, to url: URL) async throws {
+        let root = SCNNode()
+        let jobs: [(SCNMaterial, GraphEvaluator)] = looks.enumerated().map { i, look in
+            let material = SCNMaterial()
+            let plane = SCNPlane(width: 0.01, height: 0.01)
+            plane.materials = [material]
+            let node = SCNNode(geometry: plane)
+            node.name = "\(lookPrefix)\(i)"
+            root.addChildNode(node)
+            let graph = MaterialGraph(name: look.graph.name)
+            graph.restore(look.graph)
+            return (material, GraphEvaluator(graph: graph, size: GraphEvaluator.bakeSize(for: graph)))
+        }
+        try await Task.detached(priority: .userInitiated) {
+            let materials = jobs.enumerated().map { i, job in
+                USDWriter.MaterialJob(materials: [job.0], name: "\(lookPrefix)Material\(i)", result: job.1.evaluateMaterial(), evaluator: job.1)
+            }
+            let writer = USDWriter(rootName: "Looks")
+            let usda = writer.write(root: root, materials: materials, metadata: metadata)
+            try USDZPackager.write([USDZPackager.Entry(path: "looks.usda", data: Data(usda.utf8))] + writer.files, to: url)
         }.value
     }
 

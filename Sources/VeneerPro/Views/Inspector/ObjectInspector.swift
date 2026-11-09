@@ -6,7 +6,10 @@ struct ObjectInspector: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        if let document = model.selectedDocument { PosesSection(document: document) }
+        if let document = model.selectedDocument {
+            PosesSection(document: document)
+            ExplodeSection(document: document)
+        }
         if model.selectedNodes.count > 1, let document = model.selectedDocument {
             let _ = document.sceneRevision
             InspectorSection(title: "\(model.selectedNodes.count) Objects Selected") {
@@ -20,7 +23,7 @@ struct ObjectInspector: View {
                     Spacer()
                     Button("Delete", role: .destructive) { model.deleteSelection() }
                 }
-                Text("⌘- or ⇧-click parts in the viewer or rows in the Scene list to add or remove them.")
+                Text(UIWords.isTouch ? "Select rows in the Scene list to add or remove objects." : "⌘- or ⇧-click parts in the viewer or rows in the Scene list to add or remove them.")
                     .appFont(10).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -33,7 +36,7 @@ struct ObjectInspector: View {
             VStack(spacing: 8) {
                 Image(systemName: "cube.transparent").appFont(26).foregroundStyle(.tertiary)
                 Text("No Object Selected").appFont(13, weight: .semibold)
-                Text("Click a part in the viewport, or pick one in the sidebar's Scene tab.")
+                Text("\(UIWords.click) a part in the viewport, or pick one in the sidebar's Scene tab.")
                     .appFont(10).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
@@ -185,7 +188,7 @@ private struct AxisField: View {
                     if dragStart == nil { dragStart = value }
                     onChange(dragStart! + Float(drag.translation.width) * step)
                 }.onEnded { _ in dragStart = nil })
-                .onHover { inside in if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }
+                .resizeCursorOnHover()
             TextField(label, value: Binding(get: { Double(value) }, set: { onChange(Float($0)) }),
                       format: .number.precision(.fractionLength(0...3)))
                 .textFieldStyle(.roundedBorder)

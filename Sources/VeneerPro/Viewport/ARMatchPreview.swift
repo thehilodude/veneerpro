@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import Observation
 import RealityKit
@@ -311,3 +312,4 @@ private struct ScrollZoom: NSViewRepresentable {
         deinit { if let monitor { NSEvent.removeMonitor(monitor) } }
     }
 }
+#endif
