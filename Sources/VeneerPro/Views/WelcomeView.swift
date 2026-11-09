@@ -138,6 +138,18 @@ struct WelcomeView: View {
             .foregroundStyle(Color.accentColor)
             .help("A quick look at what Veneer Pro can do")
             .padding(.top, 18)
+            if TipJar.isAvailable {
+                Button {
+                    openWindow(id: TipJarView.windowID)
+                } label: {
+                    Label("Support Veneer Pro", systemImage: "cup.and.heat.waves")
+                        .appFont(12.5, weight: .medium)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.orange)
+                .help("Veneer Pro is free. Tips are optional and keep it going.")
+                .padding(.top, 10)
+            }
             Spacer()
             Toggle("Show at launch", isOn: $showAtLaunch)
                 .toggleStyle(.checkbox)
