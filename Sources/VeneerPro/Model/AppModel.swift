@@ -30,7 +30,7 @@ final class AppModel {
         for name in [Notification.Name.materialsDidChange, .sceneDidChange] {
             changeObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
-                    guard let self, !self.suppressChangeTracking else { return }
+                    guard let self, !self.suppressChangeTracking, !self.contentChanged else { return }
                     self.contentChanged = true
                 }
             })

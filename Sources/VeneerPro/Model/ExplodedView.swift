@@ -359,7 +359,9 @@ extension AppModel {
     // MARK: Exploded view
 
     /// Sets how far the selected model is exploded (0…1). Slider drags coalesce into one undo step.
-    func setExplode(_ amount: Float) {
+    /// `live` is for drags: the parts move right away and the rest of the app catches up shortly
+    /// (call `finishExplodeDrag()` when the drag ends).
+    func setExplode(_ amount: Float, live: Bool = false) {
         guard let document = selectedDocument else { return }
         let amount = min(max(amount, 0), 1)
         if document.explode.plan == nil || document.explode.amount == 0 && document.explode.plan?.applied == 0 {
@@ -369,12 +371,17 @@ extension AppModel {
         beginExplodeEdit(document, name: amount == 0 ? "Collapse" : "Explode")
         document.explode.plan?.apply(amount, root: document.root)
         document.explode.amount = amount
-        document.sceneChanged()
+        if live { document.sceneChangedSoon() } else { document.sceneChanged() }
+    }
+
+    /// Brings everything up to date at the end of an exploded-view slider drag.
+    func finishExplodeDrag() {
+        selectedDocument?.sceneChanged()
     }
 
     /// Re-plans with new settings, keeping the current amount.
     func updateExplodeSettings(axis: ExplodePlan.Axis? = nil, nested: Bool? = nil, spacing: Float? = nil,
-                               order: ExplodePlan.Order? = nil) {
+                               order: ExplodePlan.Order? = nil, live: Bool = false) {
         guard let document = selectedDocument else { return }
         let amount = document.explode.amount
         beginExplodeEdit(document, name: "Exploded View Settings")
@@ -386,7 +393,7 @@ extension AppModel {
         var plan = document.explode.makePlan(document.root)
         plan.apply(amount, root: document.root)
         document.explode.plan = plan
-        document.sceneChanged()
+        if live { document.sceneChangedSoon() } else { document.sceneChanged() }
     }
 
     /// Runs `body` (a hierarchy edit) with the model collapsed, then explodes it again with a fresh
@@ -434,6 +441,12 @@ extension AppModel {
 
     private func beginExplodeEdit(_ document: ModelDocument, name: String) {
         let key = "explode-\(ObjectIdentifier(document))"
+        // Mid-drag the step is already open with its "before" state, so just keep it open.
+        if history.isGrouping(key) {
+            history.beginGroup(key) { nil }
+            noteProjectEdit()
+            return
+        }
         let before = document.currentPoseStates, beforeState = document.explode
         history.beginGroup(key) { [weak document] in
             guard let document else { return nil }

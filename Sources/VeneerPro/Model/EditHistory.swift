@@ -44,6 +44,9 @@ final class EditHistory {
         redoStack.removeAll()
     }
 
+    /// Whether a coalesced step for `key` is open (its "before" state is already captured).
+    func isGrouping(_ key: AnyHashable) -> Bool { openGroups[key] != nil }
+
     /// Starts (or extends) a coalesced step for `key`. `close` is called once the edits pause and
     /// returns the finished step (or nil if nothing really changed).
     func beginGroup(_ key: AnyHashable, close: @escaping () -> Step?) {

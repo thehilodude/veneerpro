@@ -484,7 +484,8 @@ extension AppModel {
     }
 
     /// Edits that don't touch materials or the scene (e.g. renaming a colorway).
-    func noteProjectEdit() { if !suppressChangeTracking { contentChanged = true } }
+    /// Only sets the flag when it changes, so continuous edits don't redraw everything that reads it.
+    func noteProjectEdit() { if !suppressChangeTracking, !contentChanged { contentChanged = true } }
 
     /// Saves to the open project, or asks where to save an untitled one. Returns whether it saved.
     @discardableResult

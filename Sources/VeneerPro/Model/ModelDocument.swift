@@ -376,9 +376,25 @@ final class ModelDocument: Identifiable {
     }
 
     func sceneChanged() {
+        pendingSceneChange?.cancel()
+        pendingSceneChange = nil
         sceneRevision &+= 1
         NotificationCenter.default.post(name: .sceneDidChange, object: self)
     }
+
+    /// For continuous edits such as slider drags, which move nodes many times a second: the viewport
+    /// shows each move directly, while everything that follows scene changes (the Scene list, size
+    /// readout, floor placement, live previews) catches up once the edits pause. Updating those costs
+    /// a full window layout, too slow to repeat during a drag.
+    @MainActor func sceneChangedSoon() {
+        pendingSceneChange?.cancel()
+        pendingSceneChange = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled, let self else { return }
+            self.sceneChanged()
+        }
+    }
+    @ObservationIgnored private var pendingSceneChange: Task<Void, Never>?
 
     /// Real-world size (meters) of the visible geometry under `node` (default: the whole model), as
     /// width (X), height (Y, up) and depth (Z) in the viewer's upright frame.

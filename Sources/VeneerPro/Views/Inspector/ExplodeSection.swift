@@ -11,7 +11,9 @@ struct ExplodeSection: View {
         InspectorSection(title: "Exploded View") {
             HStack(spacing: 8) {
                 Image(systemName: "square.stack.3d.down.right").foregroundStyle(.secondary)
-                Slider(value: Binding(get: { Double(state.amount) }, set: { model.setExplode(Float($0)) }), in: 0...1)
+                Slider(value: Binding(get: { Double(state.amount) }, set: { model.setExplode(Float($0), live: true) }), in: 0...1) { editing in
+                    if !editing { model.finishExplodeDrag() }
+                }
                 Text("\(Int((state.amount * 100).rounded()))%")
                     .appFont(11, monospacedDigits: true).foregroundStyle(.secondary)
                     .frame(width: 36, alignment: .trailing)
@@ -42,7 +44,9 @@ struct ExplodeSection: View {
             .help("Auto: stacked parts go up and down, side-by-side parts split apart, overhanging parts move out the way they stick out. X, Y or Z sends every part along that axis where it can come out that way")
 
             LabeledContent("Spacing") {
-                Slider(value: Binding(get: { Double(state.spacing) }, set: { model.updateExplodeSettings(spacing: Float($0)) }), in: 0.3...3)
+                Slider(value: Binding(get: { Double(state.spacing) }, set: { model.updateExplodeSettings(spacing: Float($0), live: true) }), in: 0.3...3) { editing in
+                    if !editing { model.finishExplodeDrag() }
+                }
             }
             Toggle("Spread parts inside groups", isOn: Binding(get: { state.nested }, set: { model.updateExplodeSettings(nested: $0) }))
                 .help("Off: groups move as single blocks")
