@@ -1,110 +1,63 @@
 {
   "features" : [
-    "refractivity",
-    "specular-location"
+    "refractivity"
   ],
-  "fill-specializations" : [
-    {
-      "value" : {
-        "linear-gradient" : [
-          "display-p3:0.00000,0.00000,0.00000,1.00000",
-          "display-p3:0.56592,0.56592,0.55908,1.00000"
-        ]
-      }
-    },
-    {
-      "appearance" : "dark",
-      "value" : {
-        "linear-gradient" : [
-          "display-p3:0.15896,0.15835,0.15654,1.00000",
-          "display-p3:0.56592,0.56592,0.55908,1.00000"
-        ]
-      }
-    }
-  ],
+  "fill" : {
+    "linear-gradient" : [
+      "display-p3:0.19103,0.53637,0.67109,1.00000",
+      "display-p3:0.10258,0.27078,0.33657,1.00000"
+    ]
+  },
   "groups" : [
     {
-      "blur-material" : 0.5,
-      "hidden" : false,
+      "blur-material" : null,
       "layers" : [
         {
+          "blend-mode" : "normal",
           "fill" : {
-            "automatic-gradient" : "display-p3:0.53849,0.53849,0.53849,1.00000"
+            "linear-gradient" : [
+              "display-p3:0.63512,0.63512,0.63512,1.00000",
+              "display-p3:0.42902,0.42902,0.42902,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.09587860107421875,
+                "y" : 0.0279541015625
+              },
+              "stop" : {
+                "x" : 0.9166336059570312,
+                "y" : 0.96844482421875
+              }
+            }
           },
+          "glass" : false,
+          "hidden" : false,
           "image-name" : "IconBorder-filled.png",
           "name" : "IconBorder-filled"
         }
       ],
-      "lighting" : "combined",
+      "lighting" : "individual",
       "refractivity" : {
-        "depth" : 0.91125,
+        "depth" : 0.6662109375,
         "enabled" : true,
-        "strength" : 0.856328125
+        "strength" : 0.4150390625
       },
       "shadow" : {
-        "kind" : "layer-color",
-        "opacity" : 0.9
+        "kind" : "neutral",
+        "opacity" : 1
       },
-      "specular" : true,
       "translucency" : {
         "enabled" : true,
-        "value" : 0.3
+        "value" : 0.5
       }
     },
     {
-      "blur-material" : null,
-      "hidden" : false,
       "layers" : [
         {
-          "image-name" : "OuterShell.png",
-          "name" : "OuterShell",
+          "image-name" : "VeneerWoodMatte 2.png",
+          "name" : "VeneerWoodMatte 2",
           "position" : {
-            "scale" : 0.59,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
-        },
-        {
-          "image-name" : "WoodVeneer.png",
-          "name" : "WoodVeneer",
-          "position" : {
-            "scale" : 0.59,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
-        },
-        {
-          "image-name" : "GlassCurve.png",
-          "name" : "GlassCurve",
-          "position" : {
-            "scale" : 0.59,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
-        },
-        {
-          "image-name" : "MetalBack.png",
-          "name" : "MetalBack",
-          "position" : {
-            "scale" : 0.59,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
-        },
-        {
-          "hidden" : false,
-          "image-name" : "FullLogo.png",
-          "name" : "FullLogo",
-          "position" : {
-            "scale" : 0.59,
+            "scale" : 0.5,
             "translation-in-points" : [
               0,
               0
@@ -112,26 +65,32 @@
           }
         }
       ],
-      "lighting" : "combined",
-      "position" : {
-        "scale" : 1.01,
-        "translation-in-points" : [
-          0,
-          14
-        ]
-      },
-      "refractivity" : {
-        "depth" : 0.5224609375,
-        "enabled" : true,
-        "strength" : 0.3203515625
-      },
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5
       },
-      "specular" : "outside",
       "translucency" : {
-        "enabled" : true,
+        "enabled" : false,
+        "value" : 0.3
+      }
+    },
+    {
+      "blend-mode" : "normal",
+      "layers" : [
+        {
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "Grid 2.png",
+          "name" : "Grid 2"
+        }
+      ],
+      "opacity" : 0.6,
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : false,
         "value" : 0.3
       }
     }
